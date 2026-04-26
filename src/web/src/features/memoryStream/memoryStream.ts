@@ -24,6 +24,12 @@ import {
   detectToolResult,
   type BuddyEvent,
 } from "@/features/buddyEvents/buddyEvents";
+import { getLocale } from "@/features/i18n/i18n";
+
+function L(zh: string, en: string, ja: string): string {
+  const l = getLocale();
+  return l === "en" ? en : l === "ja" ? ja : zh;
+}
 
 const STORAGE_KEY = "lumina.memoryStream";
 const SCHEMA_VERSION = 1;
@@ -92,21 +98,21 @@ export function memoryFromEvent(evt: BuddyEvent): MemoryEntry | null {
   const ts = typeof evt.ts === "number" ? evt.ts : Date.now();
 
   if (evt.type === "SessionStart") {
-    return { ts, kind: "session_start", summary: "開始一段 session", sentiment: "neutral" };
+    return { ts, kind: "session_start", summary: L("開始一段 session", "started a session", "セッションを開始"), sentiment: "neutral" };
   }
   if (evt.type === "SessionEnd") {
-    return { ts, kind: "session_end", summary: "結束一段 session", sentiment: "neutral" };
+    return { ts, kind: "session_end", summary: L("結束一段 session", "ended a session", "セッションを終了"), sentiment: "neutral" };
   }
 
   if (evt.type === "PostToolUse" && evt.tool === "Bash") {
     const git = detectGit(evt);
     if (git) {
       if (git.op === "push") {
-        return { ts, kind: "git_push", summary: "推上去了", sentiment: "positive" };
+        return { ts, kind: "git_push", summary: L("推上去了", "pushed to remote", "プッシュしました"), sentiment: "positive" };
       }
       if (git.op === "commit" && git.message && FIX_PATTERN.test(git.message)) {
         const msg = git.message.length > 30 ? git.message.slice(0, 28) + "…" : git.message;
-        return { ts, kind: "git_fix_commit", summary: `修了 ${msg}`, sentiment: "positive" };
+        return { ts, kind: "git_fix_commit", summary: L(`修了 ${msg}`, `fixed: ${msg}`, `修正: ${msg}`), sentiment: "positive" };
       }
     }
     const result = detectToolResult(evt);
@@ -115,14 +121,16 @@ export function memoryFromEvent(evt: BuddyEvent): MemoryEntry | null {
         return {
           ts,
           kind: "test_pass",
-          summary: result.passed != null ? `${result.passed} 個測試通過` : "測試通過",
+          summary: result.passed != null
+            ? L(`${result.passed} 個測試通過`, `${result.passed} tests passed`, `${result.passed}個テスト通過`)
+            : L("測試通過", "tests passed", "テスト通過"),
           sentiment: "positive",
         };
       } else if (result.failed != null && result.failed > 0) {
         return {
           ts,
           kind: "test_fail",
-          summary: `${result.failed} 個測試失敗`,
+          summary: L(`${result.failed} 個測試失敗`, `${result.failed} tests failed`, `${result.failed}個テスト失敗`),
           sentiment: "negative",
         };
       }
@@ -179,9 +187,13 @@ export function pickReminiscence(
   // Phrase by kind — short, evocative, no LLM call required.
   const ageMin = Math.max(1, Math.round((now - pick.ts) / 60000));
   const ageStr = ageMin < 60
-    ? `${ageMin} 分鐘前`
+    ? L(`${ageMin} 分鐘前`, `${ageMin}m ago`, `${ageMin}分前`)
     : ageMin < 60 * 24
-    ? `${Math.round(ageMin / 60)} 小時前`
-    : `${Math.round(ageMin / (60 * 24))} 天前`;
-  return `💭 ${ageStr}我們${pick.summary}，記得嗎？`;
+    ? L(`${Math.round(ageMin / 60)} 小時前`, `${Math.round(ageMin / 60)}h ago`, `${Math.round(ageMin / 60)}時間前`)
+    : L(`${Math.round(ageMin / (60 * 24))} 天前`, `${Math.round(ageMin / (60 * 24))}d ago`, `${Math.round(ageMin / (60 * 24))}日前`);
+  return L(
+    `💭 ${ageStr}我們${pick.summary}，記得嗎？`,
+    `💭 ${ageStr} we ${pick.summary}, remember?`,
+    `💭 ${ageStr}に${pick.summary}しましたね。`,
+  );
 }

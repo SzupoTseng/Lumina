@@ -20,14 +20,21 @@ fi
 case "$LUMINA_ROOT" in
   /mnt/[a-z]/*)
     RUNTIME="$HOME/lumina-runtime"
-    echo "[start-dev] /mnt/ detected → syncing to $RUNTIME (avoiding 9p bug)"
+    WEB_DIR="$RUNTIME/src/web"
+
+    # Always sync first - backgrounding this creates a race condition yielding Next.js 404
+    if [ -d "$WEB_DIR/node_modules" ]; then
+      echo "[start-dev] /mnt/ detected → syncing to $RUNTIME (fast start)"
+    else
+      echo "[start-dev] /mnt/ detected → initial sync to $RUNTIME (avoiding 9p bug)"
+    fi
     rsync -a --delete \
       --exclude='node_modules' \
       --exclude='.next' \
       --exclude='.git' \
       --exclude='reasoninghist' \
       "$LUMINA_ROOT/" "$RUNTIME/"
-    WEB_DIR="$RUNTIME/src/web"
+
     if [ ! -d "$WEB_DIR/node_modules" ]; then
       echo "[start-dev] running npm install in $WEB_DIR"
       (cd "$WEB_DIR" && npm install --no-audit --no-fund)

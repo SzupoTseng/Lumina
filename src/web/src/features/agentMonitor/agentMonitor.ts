@@ -19,6 +19,12 @@
 // State held in memory only — no localStorage. Misbehavior is per-session.
 
 import type { BuddyEvent } from "@/features/buddyEvents/buddyEvents";
+import { getLocale } from "@/features/i18n/i18n";
+
+function L(zh: string, en: string, ja: string): string {
+  const l = getLocale();
+  return l === "en" ? en : l === "ja" ? ja : zh;
+}
 
 type EmotionPreset = "neutral" | "happy" | "angry" | "sad" | "relaxed";
 
@@ -70,17 +76,23 @@ const DANGEROUS_PATTERNS: Array<{ re: RegExp; reason: string; severity: AlertSev
   { re: /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, reason: "fork bomb", severity: "stop" },
 ];
 
-const LOOP_LINES = [
-  "🌀 你在這個檔案繞了好幾圈了…要不要先休息一下？",
-  "🌀 同一個地方改了三次，停下來想想？",
-  "🌀 嗯…這已經是第幾輪了？",
+const LOOP_LINES = () => [
+  L("🌀 你在這個檔案繞了好幾圈了…要不要先休息一下？", "🌀 Going in circles on this file… take a break?", "🌀 このファイルをループしています…休憩しませんか？"),
+  L("🌀 同一個地方改了三次，停下來想想？", "🌀 Changed the same spot 3 times, pause and think?", "🌀 同じ箇所を3回変更しました、立ち止まって考えましょう？"),
+  L("🌀 嗯…這已經是第幾輪了？", "🌀 Hmm… how many rounds is this now?", "🌀 うーん…これは何周目ですか？"),
 ];
-const REVERT_LINES = [
-  "↩️ 等等，你剛剛把自己上一個改動撤掉了？",
-  "↩️ 這是把剛才的改動倒回去喔。確定嗎？",
+const REVERT_LINES = () => [
+  L("↩️ 等等，你剛剛把自己上一個改動撤掉了？", "↩️ Wait, you just reverted your own last change?", "↩️ 待って、さっきの変更を元に戻しましたか？"),
+  L("↩️ 這是把剛才的改動倒回去喔。確定嗎？", "↩️ This undoes what you just changed. Sure?", "↩️ これは直前の変更を元に戻します。確認しますか？"),
 ];
-const DANGER_LINES_STOP = ["🛑 住手！這個指令會搞壞東西。", "🛑 STOP — 這個操作不可逆。"];
-const DANGER_LINES_WARN = ["⚠️ 這指令有點重，確定嗎？", "⚠️ 小心一點…"];
+const DANGER_LINES_STOP = () => [
+  L("🛑 住手！這個指令會搞壞東西。", "🛑 Stop! This command will break things.", "🛑 止まれ！このコマンドは問題を引き起こします。"),
+  L("🛑 STOP — 這個操作不可逆。", "🛑 STOP — This operation is irreversible.", "🛑 STOP — この操作は取り消せません。"),
+];
+const DANGER_LINES_WARN = () => [
+  L("⚠️ 這指令有點重，確定嗎？", "⚠️ This command is heavy, are you sure?", "⚠️ このコマンドは重大です、確認しますか？"),
+  L("⚠️ 小心一點…", "⚠️ Be careful…", "⚠️ 気をつけて…"),
+];
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -120,7 +132,7 @@ export function feedEvent(
           if (now - state.lastAlertTs < ALERT_COOLDOWN_MS) {
             return { state, alert: null };
           }
-          const lines = severity === "stop" ? DANGER_LINES_STOP : DANGER_LINES_WARN;
+          const lines = severity === "stop" ? DANGER_LINES_STOP() : DANGER_LINES_WARN();
           return {
             state: { ...state, lastAlertTs: now },
             alert: {
@@ -170,7 +182,7 @@ export function feedEvent(
         alert: {
           kind: "edit_revert",
           severity: "warn",
-          line: pick(REVERT_LINES),
+          line: pick(REVERT_LINES()),
           emotion: "sad",
           ts: now,
           file,
@@ -196,7 +208,7 @@ export function feedEvent(
       alert: {
         kind: "edit_loop",
         severity: "warn",
-        line: pick(LOOP_LINES),
+        line: pick(LOOP_LINES()),
         emotion: "sad",
         ts: now,
         file,

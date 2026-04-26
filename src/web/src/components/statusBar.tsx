@@ -2,6 +2,7 @@
 // Polls every 5s. Click a down service to confirm restart via API.
 
 import { useEffect, useState, useCallback } from "react";
+import { useT } from "@/features/i18n/i18n";
 
 type Status = "up" | "down" | "checking";
 
@@ -32,21 +33,20 @@ function ServicePill({
   );
 }
 
-async function restartBridge() {
-  if (!confirm("Bridge 已停止。重新啟動？")) return;
-  try {
-    // POST to Next.js API route that shells out to start-bridge.sh
-    await fetch("/api/restart-bridge", { method: "POST" });
-    // Give it 3s to come up
-    await new Promise(r => setTimeout(r, 3000));
-  } catch {
-    alert("重啟指令送出失敗，請手動執行 scripts/start-bridge.sh");
-  }
-}
-
 export function StatusBar() {
+  const t = useT();
   const [web,    setWeb]    = useState<Status>("checking");
   const [bridge, setBridge] = useState<Status>("checking");
+
+  const restartBridge = useCallback(async () => {
+    if (!confirm(t("ui.bridge.restart.confirm"))) return;
+    try {
+      await fetch("/api/restart-bridge", { method: "POST" });
+      await new Promise(r => setTimeout(r, 3000));
+    } catch {
+      alert(t("ui.bridge.restart.fail"));
+    }
+  }, [t]);
 
   const check = useCallback(async () => {
     setWeb("up"); // page is loaded → web is up

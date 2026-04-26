@@ -12,16 +12,24 @@
 // the parent's setTimeout — no internal timers so React strict-mode
 // double-mount doesn't double-schedule.
 
-const TRIUMPH_LINE_DEFAULT = "🎯 一切都在計畫之中。";
-const CRISIS_LINE_DEFAULT = "💥 系統壓力 critical…";
+import { getLocale } from "@/features/i18n/i18n";
+
+function loc(zh: string, en: string, ja: string) {
+  const l = getLocale();
+  return l === "en" ? en : l === "ja" ? ja : zh;
+}
+
+const TRIUMPH_LINE_DEFAULT = () => loc("🎯 一切都在計畫之中。", "🎯 All according to plan.", "🎯 計画通り。");
+const CRISIS_LINE_DEFAULT  = () => loc("💥 系統壓力 critical…", "💥 System pressure critical…", "💥 システム負荷 critical…");
 
 export function TriumphMoment({
   active,
-  message = TRIUMPH_LINE_DEFAULT,
+  message,
 }: {
   active: boolean;
   message?: string;
 }) {
+  const msg = message ?? TRIUMPH_LINE_DEFAULT();
   if (!active) return null;
   return (
     <div
@@ -47,7 +55,7 @@ export function TriumphMoment({
           "drop-shadow-[0_0_12px_rgba(255,150,40,0.8)]"
         }
       >
-        {message}
+        {msg}
       </div>
     </div>
   );
@@ -55,11 +63,12 @@ export function TriumphMoment({
 
 export function CrisisGlitch({
   active,
-  message = CRISIS_LINE_DEFAULT,
+  message,
 }: {
   active: boolean;
   message?: string;
 }) {
+  const msg = message ?? CRISIS_LINE_DEFAULT();
   if (!active) return null;
   return (
     <div
@@ -82,7 +91,7 @@ export function CrisisGlitch({
           "drop-shadow-[0_0_10px_rgba(255,40,40,0.85)]"
         }
       >
-        {message}
+        {msg}
       </div>
     </div>
   );

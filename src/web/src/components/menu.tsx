@@ -1,4 +1,5 @@
 import { IconButton } from "./iconButton";
+import { useT } from "@/features/i18n/i18n";
 import { Message } from "@/features/messages/messages";
 import { ElevenLabsParam } from "@/features/constants/elevenLabsParam";
 import { KoeiroParam } from "@/features/constants/koeiroParam";
@@ -99,6 +100,7 @@ export const Menu = ({
   buddyLogEntries = [],
   onClearBuddyLog,
 }: Props) => {
+  const t = useT();
   const [showSettings, setShowSettings] = useState(false);
   const [showChatLog, setShowChatLog] = useState(false);
   const [showBuddyLog, setShowBuddyLog] = useState(false);
@@ -263,12 +265,12 @@ export const Menu = ({
               onClick={() => { onClearBuddyLog?.(); }}
               className="text-xs px-8 py-4 bg-surface3 hover:bg-surface3-hover rounded-8 text-text-primary"
             >
-              清除
+              {t("log.clear")}
             </button>
           </div>
           <div className="flex flex-col gap-4">
             {buddyLogEntries.length === 0
-              ? <p className="text-xs text-text-primary opacity-50 text-center py-8">尚無紀錄</p>
+              ? <p className="text-xs text-text-primary opacity-50 text-center py-8">{t("log.empty")}</p>
               : buddyLogEntries.map((e, i) => (
                 <div key={i} className="text-xs border-b border-surface3 pb-4">
                   <span className="opacity-40 mr-4">

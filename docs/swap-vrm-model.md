@@ -5,8 +5,9 @@ Four ways to use a custom model. Pick by how persistent and how interactive you 
 ## 1. Drop-in library (auto-discovery — RECOMMENDED for daily use)
 
 1. Save any number of `.vrm` files into `src/web/public/models/`.
-2. Refresh the tab. The dropdown in the top-left lists all of them.
-3. Pick one — selection is persisted in `localStorage` (`lumina.selectedVrmModel`) and reloaded on every future visit.
+2. **If running from Windows (via `start-Lumina.bat`)**: The dev server actually runs in a native WSL file system clone (`~/lumina-runtime`) to bypass DrvFs bugs. You must **restart Lumina** (close the window and run the `.bat` again) so the new `.vrm` file syncs over via `rsync`.
+3. Refresh the tab (or wait for the app to reload). The dropdown in the top-left lists all of them.
+4. Pick one — selection is persisted in `localStorage` (`lumina.selectedVrmModel`) and reloaded on every future visit.
 
 Wiring: `pages/api/models.ts` reads the directory at request time; `components/modelSelector.tsx` fetches that list and calls `viewer.loadVrm()` on change. No hardcoded list.
 
@@ -72,6 +73,7 @@ Always double-check the license before committing the file to this repo. If the 
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| Pushed `.vrm` file doesn't appear in the dropdown | Working on DrvFs/Windows but didn't restart Lumina | The Next.js API route reads `~/lumina-runtime/` on WSL, not your Windows `D:\` drive. Restart `start-Lumina.bat` to trigger the `rsync` sync script. |
 | Model loads grey/untextured | Some VRoid exports omit MToon material variants | Open in VRoid Studio, re-export with "Standard MToon" enabled |
 | Avatar floats above ground | VRM hips bone offset; mostly cosmetic | Adjust camera in `viewer.ts` or use a model with neutral hips |
 | Buddy never emotes despite events arriving | Model lacks expression presets — common with low-poly imports | Open in VRoid Studio → Expression tab → assign presets to `happy`/`angry`/`sad`/`relaxed`/`neutral`. Re-export. |

@@ -478,6 +478,15 @@ export function connectBuddyEvents(
       if (ctx && options.onStatusUpdate) {
         options.onStatusUpdate({ task: ctx.task, scope: ctx.scope, todo: ctx.todo, line: ctx.line });
       }
+      // Surface as VRM bubble + neutral emote (mirrors all other event types)
+      const bubbleLine = ctx?.line ??
+        (ctx?.task
+          ? `🎯 ${ctx.task}${ctx.scope ? ` [${ctx.scope}]` : ""}${ctx.todo ? `  📋 ${ctx.todo}` : ""}`
+          : undefined);
+      if (bubbleLine) {
+        try { viewer.model?.emoteController?.playEmotion("neutral"); } catch (_) {}
+        emit(bubbleLine);
+      }
       return;
     }
 

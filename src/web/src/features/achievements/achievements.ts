@@ -20,14 +20,20 @@
 
 import type { BuddyEvent } from "@/features/buddyEvents/buddyEvents";
 import { detectGit, detectLanguage } from "@/features/buddyEvents/buddyEvents";
+import { getLocale } from "@/features/i18n/i18n";
+
+function L(zh: string, en: string, ja: string): string {
+  const l = getLocale();
+  return l === "en" ? en : l === "ja" ? ja : zh;
+}
 
 const STORAGE_KEY = "lumina.achievements";
 const SCHEMA_VERSION = 1;
 
 export type AchievementDef = {
   id: string;
-  name: string;
-  description: string;
+  name: () => string;
+  description: () => string;
   icon: string;       // single emoji
   counterKey: string;
   threshold: number;
@@ -41,86 +47,36 @@ export type AchievementState = {
 };
 
 export const ACHIEVEMENTS: ReadonlyArray<AchievementDef> = [
-  {
-    id: "first_session",
-    name: "初次見面",
-    description: "啟動 Claude Code 一次",
-    icon: "👋",
-    counterKey: "sessions",
-    threshold: 1,
-  },
-  {
-    id: "first_commit",
-    name: "第一個 commit",
-    description: "完成第一次 git commit",
-    icon: "🌱",
-    counterKey: "git_commits",
-    threshold: 1,
-  },
-  {
-    id: "first_push",
-    name: "送上線",
-    description: "完成第一次 git push",
-    icon: "🚀",
-    counterKey: "git_pushes",
-    threshold: 1,
-  },
-  {
-    id: "git_master",
-    name: "Git 達人",
-    description: "累計 50 次 commit",
-    icon: "🏅",
-    counterKey: "git_commits",
-    threshold: 50,
-  },
-  {
-    id: "late_night_owl",
-    name: "深夜貓頭鷹",
-    description: "在 00:00–04:00 期間 push",
-    icon: "🦉",
-    counterKey: "late_night_pushes",
-    threshold: 1,
-  },
-  {
-    id: "bug_hunter",
-    name: "Bug 獵人",
-    description: "10 個含 fix/bug/patch 的 commit",
-    icon: "🔍",
-    counterKey: "fix_commits",
-    threshold: 10,
-  },
-  {
-    id: "tool_master",
-    name: "工具大師",
-    description: "100 次工具呼叫（Edit/Bash/Read/...）",
-    icon: "🔧",
-    counterKey: "tool_uses",
-    threshold: 100,
-  },
-  {
-    id: "python_lover",
-    name: "Python 愛好者",
-    description: "編輯 .py 檔 20 次",
-    icon: "🐍",
-    counterKey: "python_edits",
-    threshold: 20,
-  },
-  {
-    id: "rust_warrior",
-    name: "Rust 戰士",
-    description: "編輯 .rs 檔 20 次",
-    icon: "🦀",
-    counterKey: "rust_edits",
-    threshold: 20,
-  },
-  {
-    id: "ts_native",
-    name: "TS 原住民",
-    description: "編輯 .ts/.tsx 檔 50 次",
-    icon: "🔷",
-    counterKey: "typescript_edits",
-    threshold: 50,
-  },
+  { id: "first_session",    icon: "👋", counterKey: "sessions",          threshold: 1,
+    name: () => L("初次見面",    "Hello World",        "はじめまして"),
+    description: () => L("啟動 Claude Code 一次", "Start Claude Code once", "Claude Codeを一度起動する") },
+  { id: "first_commit",     icon: "🌱", counterKey: "git_commits",        threshold: 1,
+    name: () => L("第一個 commit", "First Commit",       "最初のコミット"),
+    description: () => L("完成第一次 git commit", "First git commit", "最初のgitコミット") },
+  { id: "first_push",       icon: "🚀", counterKey: "git_pushes",         threshold: 1,
+    name: () => L("送上線",       "First Push",         "初プッシュ"),
+    description: () => L("完成第一次 git push", "First git push", "最初のgitプッシュ") },
+  { id: "git_master",       icon: "🏅", counterKey: "git_commits",        threshold: 50,
+    name: () => L("Git 達人",     "Git Master",         "Git達人"),
+    description: () => L("累計 50 次 commit", "50 total commits", "累計50コミット") },
+  { id: "late_night_owl",   icon: "🦉", counterKey: "late_night_pushes",  threshold: 1,
+    name: () => L("深夜貓頭鷹",   "Night Owl",          "深夜のフクロウ"),
+    description: () => L("在 00:00–04:00 期間 push", "Push between 00:00–04:00", "00:00〜04:00にプッシュ") },
+  { id: "bug_hunter",       icon: "🔍", counterKey: "fix_commits",        threshold: 10,
+    name: () => L("Bug 獵人",     "Bug Hunter",         "バグハンター"),
+    description: () => L("10 個含 fix/bug/patch 的 commit", "10 commits with fix/bug/patch", "fix/bug/patchを含むコミット10個") },
+  { id: "tool_master",      icon: "🔧", counterKey: "tool_uses",          threshold: 100,
+    name: () => L("工具大師",     "Tool Master",        "ツールマスター"),
+    description: () => L("100 次工具呼叫", "100 tool calls", "100回ツール呼び出し") },
+  { id: "python_lover",     icon: "🐍", counterKey: "python_edits",       threshold: 20,
+    name: () => L("Python 愛好者","Python Lover",       "Python愛好者"),
+    description: () => L("編輯 .py 檔 20 次", "Edit .py files 20 times", ".pyファイルを20回編集") },
+  { id: "rust_warrior",     icon: "🦀", counterKey: "rust_edits",         threshold: 20,
+    name: () => L("Rust 戰士",    "Rust Warrior",       "Rust戦士"),
+    description: () => L("編輯 .rs 檔 20 次", "Edit .rs files 20 times", ".rsファイルを20回編集") },
+  { id: "ts_native",        icon: "🔷", counterKey: "typescript_edits",   threshold: 50,
+    name: () => L("TS 原住民",    "TS Native",          "TS原住民"),
+    description: () => L("編輯 .ts/.tsx 檔 50 次", "Edit .ts/.tsx files 50 times", ".ts/.tsxファイルを50回編集") },
 ];
 
 const FIX_PATTERN = /\b(fix|bug|patch|hotfix|repair|resolve)\b/i;

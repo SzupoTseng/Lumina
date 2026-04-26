@@ -62,8 +62,8 @@ export function AchievementToast({
           <div className="text-[10px] uppercase tracking-widest font-bold opacity-75">
             Achievement unlocked
           </div>
-          <div className="text-base font-bold">{achievement.name}</div>
-          <div className="text-xs opacity-80">{achievement.description}</div>
+          <div className="text-base font-bold">{achievement.name()}</div>
+          <div className="text-xs opacity-80">{achievement.description()}</div>
         </div>
       </div>
     </div>

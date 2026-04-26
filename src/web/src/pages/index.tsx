@@ -28,7 +28,7 @@ import { StatusPanel } from "@/components/statusPanel";
 import { type StatusInfo } from "@/features/buddyEvents/buddyEvents";
 import { DemoPanel } from "@/components/demoPanel";
 import { BuddyLogPanel, useBuddyLog } from "@/components/buddyLog";
-import { useHydrateLocale } from "@/features/i18n/i18n";
+import { useHydrateLocale, getLocale } from "@/features/i18n/i18n";
 import { AchievementToast } from "@/components/achievementToast";
 import {
   feedEvent as feedAchievementEvent,
@@ -198,8 +198,10 @@ export default function Home() {
   // state here (unlike achievements) because the panel re-renders on every
   // change. Initial load deferred to first render to avoid SSR hydration
   // mismatches.
-  // Initialize eagerly so task events aren't dropped before useEffect fires
-  const [taskState, setTaskState] = useState<TaskTrackerState>(loadTaskState);
+  // SSR-safe: start with empty state to avoid hydration mismatch,
+  // then load from localStorage in useEffect (client-only).
+  const [taskState, setTaskState] = useState<TaskTrackerState>({ version: 1, tasks: {}, order: [] });
+  useEffect(() => { setTaskState(loadTaskState()); }, []);
 
   // Memory stream — append-only log of significant events. Held in a ref
   // (no UI binding except the SessionStart reminiscence override below).
@@ -261,9 +263,7 @@ export default function Home() {
     const disconnect = connectBuddyEvents(viewer, {
       onStatusUpdate: (info) => {
         setStatusInfo(info);
-        // MUST: log Task, Scope, TODO all to Buddy Log
-        if (info.task)  appendBuddyLog(`🎯 [Task] ${info.task}${info.scope ? ` [${info.scope}]` : ""}`);
-        if (info.todo)  appendBuddyLog(`📋 [TODO] ${info.todo}`);
+        // Logging handled by onMessage via emit() in buddyEvents.ts
         // Auto-hide StatusPanel after 30s if no new update
         if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
         statusTimerRef.current = setTimeout(() => setStatusInfo(null), 30_000);
@@ -343,7 +343,7 @@ export default function Home() {
               for (const a of result.unlocked) {
                 memoryRef.current = recordAchievementMemory(
                   memoryRef.current,
-                  a.name,
+                  a.name(),
                 );
               }
               saveMemory(memoryRef.current);
@@ -418,7 +418,7 @@ export default function Home() {
               const failed = m[2] ? Number(m[2]) : 0;
               const errors = m[3] ? Number(m[3]) : 0;
               if (passed >= 10 && failed === 0 && errors === 0) {
-                fireTriumph(`🎯 ${passed} 個測試全過。一切都在計畫之中。`);
+                fireTriumph(getLocale()==='en' ? `🎯 ${passed} tests passed. All according to plan.` : getLocale()==='ja' ? `🎯 ${passed}個テスト通過。計画通り。` : `🎯 ${passed} 個測試全過。一切都在計畫之中。`);
               }
             }
           }

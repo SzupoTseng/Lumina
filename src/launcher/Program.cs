@@ -47,14 +47,27 @@ internal static class Program
         var defaultDir = !string.IsNullOrEmpty(prefs.LastDir) && Directory.Exists(prefs.LastDir)
             ? prefs.LastDir : repoRoot;
 
-        using var setup = new SetupDialog(defaultDir, prefs.OpenClaude);
-        if (setup.ShowDialog() != DialogResult.OK) return;
+        bool forceSetup = Environment.GetCommandLineArgs().Contains("--setup");
+        string chosenDir = defaultDir;
+        bool openClaude = prefs.OpenClaude;
+        bool skipSetup = prefs.SkipSetup;
 
-        prefs.LastDir    = setup.ChosenDir;
-        prefs.OpenClaude = setup.OpenClaude;
+        if (forceSetup || !skipSetup || string.IsNullOrEmpty(prefs.LastDir) || !Directory.Exists(prefs.LastDir))
+        {
+            using var setup = new SetupDialog(defaultDir, prefs.OpenClaude, prefs.SkipSetup);
+            if (setup.ShowDialog() != DialogResult.OK) return;
+            chosenDir = setup.ChosenDir;
+            openClaude = setup.OpenClaude;
+            skipSetup = setup.SkipSetup;
+        }
 
-        StartBackground(setup.ChosenDir, startTerminal: setup.OpenClaude);
-        Application.Run(new SplitWindow(setup.ChosenDir, setup.OpenClaude, prefs));
+        prefs.LastDir    = chosenDir;
+        prefs.OpenClaude = openClaude;
+        prefs.SkipSetup  = skipSetup;
+        prefs.Save();
+
+        StartBackground(chosenDir, startTerminal: openClaude);
+        Application.Run(new SplitWindow(chosenDir, openClaude, prefs));
     }
 
     internal static void StartBackground(string winDir, bool startTerminal = false)
@@ -62,13 +75,18 @@ internal static class Program
         var wslRoot = ToWslPath(winDir);
         if (string.IsNullOrEmpty(wslRoot)) return;
 
-        // Each script is idempotent — safe to call even if already running
-        RunWsl($"bash -lc \"bash '{wslRoot}/scripts/start-bridge.sh' &\"");
-        RunWsl($"bash -lc \"bash '{wslRoot}/scripts/start-dev.sh' &\"");
-        RunWsl($"bash -lc \"nohup bash '{wslRoot}/scripts/status-bridge.sh' >/tmp/lumina-status.log 2>&1 &\"");
+        // Batch-launch in one WSL process to reduce startup overhead.
+        var commands = new List<string>
+        {
+            $"bash '{wslRoot}/scripts/start-bridge.sh' &",
+            $"bash '{wslRoot}/scripts/start-dev.sh' &",
+            $"nohup bash '{wslRoot}/scripts/status-bridge.sh' >/tmp/lumina-status.log 2>&1 &"
+        };
         if (startTerminal)
             // Uses systemd-run so the server survives after this session ends
-            RunWsl($"bash -lc \"bash '{wslRoot}/scripts/start-terminal.sh' '{wslRoot}'\"");
+            commands.Add($"bash '{wslRoot}/scripts/start-terminal.sh' '{wslRoot}' &");
+
+        RunWsl($"bash -lc \"{string.Join(" ", commands)}\"");
     }
 
     static void RunWsl(string bashCmd) =>
@@ -81,9 +99,18 @@ internal static class Program
 
     internal static string ToWslPath(string winPath)
     {
+        winPath = winPath.Replace('\\', '/');
+        
+        // Instant conversion for typical local drives (e.g. D:/path -> /mnt/d/path)
+        if (winPath.Length > 2 && winPath[1] == ':' && winPath[2] == '/')
+        {
+            return $"/mnt/{char.ToLower(winPath[0])}{winPath.Substring(2)}";
+        }
+        
+        // Safe fallback for complex/network paths via wslpath utility
         try
         {
-            var psi = new ProcessStartInfo("wsl.exe", $"wslpath -u \"{winPath.Replace('\\', '/')}\"")
+            var psi = new ProcessStartInfo("wsl.exe", $"wslpath -u \"{winPath}\"")
             { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
             using var p = Process.Start(psi)!;
             var r = p.StandardOutput.ReadToEnd().Trim();
@@ -121,6 +148,7 @@ sealed class WindowPrefs
     public int    SplitterDist  { get; set; } = -1;
     public string LastDir       { get; set; } = "";
     public bool   OpenClaude    { get; set; } = true;
+    public bool   SkipSetup     { get; set; } = false;
 
     public static WindowPrefs Load()
     {
@@ -151,12 +179,14 @@ sealed class SetupDialog : Form
 {
     private readonly TextBox _dirBox;
     private readonly CheckBox _claudeCb;
+    private readonly CheckBox _skipSetupCb;
     public string ChosenDir => _dirBox.Text.Trim();
     public bool OpenClaude => _claudeCb.Checked;
+    public bool SkipSetup => _skipSetupCb.Checked;
 
-    public SetupDialog(string defaultDir, bool claudeDefault = true)
+    public SetupDialog(string defaultDir, bool claudeDefault = true, bool skipSetupDefault = false)
     {
-        Text = "Lumina"; Size = new Size(500, 160);
+        Text = "Lumina"; Size = new Size(500, 180);
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         Font = new Font("Segoe UI", 9.5f);
@@ -168,11 +198,13 @@ sealed class SetupDialog : Form
             using var dlg = new FolderBrowserDialog { SelectedPath = _dirBox.Text };
             if (dlg.ShowDialog(this) == DialogResult.OK) _dirBox.Text = dlg.SelectedPath;
         };
-        _claudeCb = new CheckBox { Text = "左側嵌入 Claude Code CLI", Location = new Point(12, 54), Checked = claudeDefault, AutoSize = true };
-        var ok = new Button { Text = "啟動", Location = new Point(304, 90), Width = 70, Height = 28, DialogResult = DialogResult.OK };
-        var cancel = new Button { Text = "取消", Location = new Point(382, 90), Width = 70, Height = 28, DialogResult = DialogResult.Cancel };
+        _claudeCb = new CheckBox { Text = "Embed Claude Code CLI on left", Location = new Point(12, 54), Checked = claudeDefault, AutoSize = true };
+        _skipSetupCb = new CheckBox { Text = "Don't ask me again (skip this dialog next time)", Location = new Point(12, 82), Checked = skipSetupDefault, AutoSize = true };
+
+        var ok = new Button { Text = "Start", Location = new Point(304, 108), Width = 70, Height = 28, DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "Cancel", Location = new Point(382, 108), Width = 70, Height = 28, DialogResult = DialogResult.Cancel };
         AcceptButton = ok; CancelButton = cancel;
-        Controls.AddRange(new Control[] { _dirBox, browse, _claudeCb, ok, cancel });
+        Controls.AddRange(new Control[] { _dirBox, browse, _claudeCb, _skipSetupCb, ok, cancel });
     }
 }
 
@@ -350,7 +382,7 @@ sealed class SplitWindow : Form
 
         _rightStatus = new Label
         {
-            Text = "⏳ 等待 dev server…",
+            Text = "⏳ Waiting for dev server…",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI", 13f),
             ForeColor = Color.FromArgb(160, 160, 160),
@@ -428,8 +460,7 @@ sealed class SplitWindow : Form
         else
             _split!.SplitterDistance = _split.Width / 2;
 
-        await _leftWv.EnsureCoreWebView2Async();
-        await _rightWv.EnsureCoreWebView2Async();
+        await Task.WhenAll(_leftWv.EnsureCoreWebView2Async(), _rightWv.EnsureCoreWebView2Async());
 
         // Allow clipboard read/write so Ctrl+C and Ctrl+V work in the terminal
         _leftWv.CoreWebView2.PermissionRequested += (_, a) => {
@@ -441,10 +472,9 @@ sealed class SplitWindow : Form
 
         if (_openClaude)
         {
-            // Fetch the auth token that terminal server printed to stdout
-            var token = await GetTerminalToken();
-            var html = TERMINAL_HTML.Replace("__TERMINAL_TOKEN__", token);
-            _leftWv.CoreWebView2.NavigateToString(html);
+            _leftWv.CoreWebView2.NavigateToString(
+                "<html><body style='background:#0d0d0d;color:#999;display:flex;align-items:center;justify-content:center;height:100vh;font:14px Segoe UI'>Starting Claude Terminal…</body></html>");
+            _ = InitializeTerminalViewAsync();
         }
         else
         {
@@ -455,32 +485,58 @@ sealed class SplitWindow : Form
         _ = WaitAndNavigateBuddy();
     }
 
-    // Read the auth token that the terminal server printed to its log on startup
+    private async Task InitializeTerminalViewAsync()
+    {
+        var token = await GetTerminalToken();
+        if (string.IsNullOrEmpty(token))
+        {
+            _leftWv.CoreWebView2.NavigateToString(
+                "<html><body style='background:#0d0d0d;color:#b55;display:flex;align-items:center;justify-content:center;height:100vh;font:14px Segoe UI'>terminal token unavailable</body></html>");
+            return;
+        }
+
+        var html = TERMINAL_HTML.Replace("__TERMINAL_TOKEN__", token);
+        _leftWv.CoreWebView2.NavigateToString(html);
+    }
+
+    // Read terminal auth token from WSL cache file populated by start-terminal.sh
     private static async Task<string> GetTerminalToken()
     {
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 20; i++)
         {
-            await Task.Delay(500);
             try
             {
-                var log = File.ReadAllText("/tmp/lumina-terminal.log");
-                var match = System.Text.RegularExpressions.Regex.Match(log, @"LUMINA_TOKEN=([0-9a-f]{32})");
-                if (match.Success) return match.Groups[1].Value;
+                var psi = new ProcessStartInfo("wsl.exe", "-- bash -c \"cat ${XDG_CACHE_HOME:-$HOME/.cache}/lumina/terminal.token 2>/dev/null || true\"")
+                {
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using var p = Process.Start(psi);
+                if (p != null)
+                {
+                    var token = (await p.StandardOutput.ReadToEndAsync()).Trim();
+                    await p.WaitForExitAsync();
+                    if (System.Text.RegularExpressions.Regex.IsMatch(token, "^[0-9a-f]{32}$"))
+                        return token;
+                }
             }
             catch { }
+            await Task.Delay(200);
         }
-        return ""; // fallback: no token (server will reject, but shows error gracefully)
+        return "";
     }
 
     private async Task WaitAndNavigateBuddy()
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        for (int i = 0; i < 120; i++)
+        for (int i = 0; i < 150; i++)
         {
             try { var r = await http.GetAsync(BUDDY_URL); if ((int)r.StatusCode < 500) { NavigateBuddy(); return; } }
             catch { }
-            await Task.Delay(1000);
-            Invoke(() => _rightStatus.Text = $"⏳ 等待 dev server… ({i + 1}s)");
+            await Task.Delay(200);
+            if (i % 5 == 0) // only update UI every second
+                Invoke(() => _rightStatus.Text = $"⏳ Waiting for dev server… ({(i * 200) / 1000}s)");
         }
         NavigateBuddy();
     }

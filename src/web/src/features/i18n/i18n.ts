@@ -48,6 +48,17 @@ type Key =
   | "language.zh-TW"
   | "language.en"
   | "language.ja"
+  | "hooks.status.ok"
+  | "hooks.status.missing"
+  | "hooks.install"
+  | "hooks.uninstall"
+  | "hooks.installing"
+  | "log.title"
+  | "log.empty"
+  | "log.clear"
+  | "ui.refresh"
+  | "ui.bridge.restart.confirm"
+  | "ui.bridge.restart.fail"
   | "demo.title"
   | "demo.cat.slash"
   | "demo.cat.emotion"
@@ -76,6 +87,17 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     "language.zh-TW": "繁體中文",
     "language.en": "English",
     "language.ja": "日本語",
+    "hooks.status.ok": "Hooks ✓",
+    "hooks.status.missing": "Hooks 未安裝",
+    "hooks.install": "安裝",
+    "hooks.uninstall": "移除",
+    "hooks.installing": "…",
+    "log.title": "Buddy Log",
+    "log.empty": "尚無紀錄",
+    "log.clear": "清除",
+    "ui.refresh": "重新整理",
+    "ui.bridge.restart.confirm": "Bridge 已停止。重新啟動？",
+    "ui.bridge.restart.fail": "Bridge 重啟失敗，請手動執行 scripts/start-bridge.sh",
     "demo.title": "互動測試",
     "demo.cat.slash": "Slash Commands",
     "demo.cat.emotion": "情緒測試",
@@ -103,6 +125,17 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     "language.zh-TW": "繁體中文",
     "language.en": "English",
     "language.ja": "日本語",
+    "hooks.status.ok": "Hooks ✓",
+    "hooks.status.missing": "Hooks not installed",
+    "hooks.install": "Install",
+    "hooks.uninstall": "Remove",
+    "hooks.installing": "…",
+    "log.title": "Buddy Log",
+    "log.empty": "No entries yet",
+    "log.clear": "Clear",
+    "ui.refresh": "Refresh",
+    "ui.bridge.restart.confirm": "Bridge is down. Restart it?",
+    "ui.bridge.restart.fail": "Failed to restart bridge. Run scripts/start-bridge.sh manually.",
     "demo.title": "Demo",
     "demo.cat.slash": "Slash Commands",
     "demo.cat.emotion": "Emotions",
@@ -130,6 +163,17 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     "language.zh-TW": "繁體中文",
     "language.en": "English",
     "language.ja": "日本語",
+    "hooks.status.ok": "Hooks ✓",
+    "hooks.status.missing": "Hooks 未インストール",
+    "hooks.install": "インストール",
+    "hooks.uninstall": "削除",
+    "hooks.installing": "…",
+    "log.title": "Buddy Log",
+    "log.empty": "記録なし",
+    "log.clear": "クリア",
+    "ui.refresh": "更新",
+    "ui.bridge.restart.confirm": "Bridgeが停止しています。再起動しますか？",
+    "ui.bridge.restart.fail": "Bridgeの再起動に失敗しました。scripts/start-bridge.shを手動で実行してください。",
     "demo.title": "デモ",
     "demo.cat.slash": "スラッシュコマンド",
     "demo.cat.emotion": "感情テスト",

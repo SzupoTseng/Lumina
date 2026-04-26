@@ -10,7 +10,7 @@ if not exist "%LAUNCHER%" (
   echo.
   echo Build it first:
   echo   cd src\launcher
-  echo   dotnet publish -c Release -r win-x64 --self-contained false
+  echo   dotnet publish -c Release -r win-x64 --self-contained false -o publish
   pause
   exit /b 1
 )

@@ -3,6 +3,7 @@
 // Persistent in localStorage; user can clear.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/features/i18n/i18n";
 
 export interface BuddyLogEntry {
   ts:   number;   // Unix ms
@@ -62,6 +63,7 @@ const PANEL_STYLE = { backgroundColor: "#514062", borderColor: "#856292" } as co
 const OPEN_KEY = "lumina.buddyLog.open";
 
 export function BuddyLogPanel({ entries, onClear }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -106,14 +108,14 @@ export function BuddyLogPanel({ entries, onClear }: Props) {
               onClick={onClear}
               className="text-[9px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white"
             >
-              清除
+              {t("log.clear")}
             </button>
           </div>
 
           {/* Entries */}
           <div className="flex-1 overflow-y-auto">
             {entries.length === 0 ? (
-              <p className="text-[10px] text-white/40 p-3 text-center">尚無紀錄</p>
+              <p className="text-[10px] text-white/40 p-3 text-center">{t("log.empty")}</p>
             ) : (
               entries.map((e, i) => (
                 <div key={i} className="px-3 py-1.5 border-b border-white/10 last:border-0">

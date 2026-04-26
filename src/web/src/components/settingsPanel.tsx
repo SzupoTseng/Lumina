@@ -48,6 +48,7 @@ function LanguageSelector() {
 }
 
 function HookStatus() {
+  const t = useT();
   const [status, setStatus] = useState<{ installed: boolean; count: number; expected: number } | null>(null);
   const [busy,   setBusy]   = useState(false);
 
@@ -80,7 +81,9 @@ function HookStatus() {
       <div className="flex items-center gap-1.5">
         <span className={`w-2 h-2 rounded-full ${ok ? "bg-green-400" : "bg-red-400"}`} />
         <span className="text-[10px] text-white/80">
-          {ok ? `Hooks ✓ (${status.count})` : `Hooks 未安裝 (${status.count}/${status.expected})`}
+          {ok
+            ? `${t("hooks.status.ok")} (${status.count})`
+            : `${t("hooks.status.missing")} (${status.count}/${status.expected})`}
         </span>
       </div>
       <div className="flex gap-1">
@@ -89,14 +92,14 @@ function HookStatus() {
           disabled={busy}
           className="text-[9px] px-2 py-0.5 rounded bg-primary hover:bg-primary-hover text-white disabled:opacity-40"
         >
-          {busy ? "…" : "安裝"}
+          {busy ? t("hooks.installing") : t("hooks.install")}
         </button>
         <button
           onClick={() => act("uninstall")}
           disabled={busy}
           className="text-[9px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white disabled:opacity-40"
         >
-          移除
+          {t("hooks.uninstall")}
         </button>
       </div>
     </div>
@@ -104,6 +107,7 @@ function HookStatus() {
 }
 
 function BuddyLogSection({ entries, onClear }: { entries: BuddyLogEntry[]; onClear: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [entries, open]);
@@ -118,17 +122,17 @@ function BuddyLogSection({ entries, onClear }: { entries: BuddyLogEntry[]; onCle
       <div className="flex items-center gap-1.5">
         <button onClick={() => setOpen(o => !o)}
           className="text-[10px] text-white/80 uppercase tracking-widest font-bold flex-1 text-left">
-          {open ? "▾" : "▸"} Conversation Log {entries.length > 0 ? `(${entries.length})` : ""}
+          {open ? "▾" : "▸"} {t("log.title")} {entries.length > 0 ? `(${entries.length})` : ""}
         </button>
         <button onClick={onClear}
           className="text-[9px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white">
-          清除
+          {t("log.clear")}
         </button>
       </div>
       {open && (
         <div className="max-h-[160px] overflow-y-auto rounded-md bg-black/30">
           {entries.length === 0
-            ? <p className="text-[10px] text-white/40 p-2 text-center">尚無紀錄</p>
+            ? <p className="text-[10px] text-white/40 p-2 text-center">{t("log.empty")}</p>
             : entries.map((e, i) => (
               <div key={i} className="px-2 py-1 border-b border-white/10 last:border-0">
                 <span className="text-[9px] text-white/40 mr-1">{fmt(e.ts)}</span>
@@ -200,7 +204,7 @@ export function SettingsPanel({
         <button
           type="button"
           onClick={() => window.location.reload()}
-          title="重新整理"
+          title={t("ui.refresh")}
           className="text-white hover:text-white/80 text-xs leading-none p-1 rounded hover:bg-purple-500/10 focus:outline-none transition-colors"
         >
           ↺

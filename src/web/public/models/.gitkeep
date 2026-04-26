@@ -1,0 +1,3 @@
+Drop *.vrm files in this directory. The /api/models route auto-discovers
+them and the ModelSelector dropdown lists them on next page load.
+See docs/swap-vrm-model.md for details.

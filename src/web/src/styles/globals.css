@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-position: top center;
+  background-attachment: fixed;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+@layer components {
+  .input-range {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: #858585;
+    height: 2px;
+    width: 100%;
+    border-radius: 4px;
+  }
+  .input-range:focus,
+  .input-range:active {
+    outline: none;
+  }
+  .input-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    position: relative;
+    width: 24px;
+    height: 24px;
+    display: block;
+    border: 2px solid #856292;
+    background-color: #ffffff;
+    border-radius: 50%;
+    -webkit-border-radius: 50%;
+  }
+}
+
+@layer utilities {
+  .scroll-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scroll-hidden::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Lumina: energy-gathering particle effect for long bash tasks.
+   Used by src/components/energyGathering.tsx. Keyframes live here so the
+   component can stay free of styled-jsx type augmentation. */
+@keyframes lumina-energy-drift {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 0.95;
+  }
+  90% {
+    opacity: 0.6;
+    transform: translate(var(--lumina-dx, 0), var(--lumina-dy, 0)) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--lumina-dx, 0), var(--lumina-dy, 0)) scale(0.5);
+  }
+}
+.lumina-energy-particle {
+  --lumina-dx: calc(50vw - 50%);
+  --lumina-dy: calc(45vh - 50%);
+  animation-name: lumina-energy-drift;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+/* Lumina: triumph moment — fade-in + slow zoom on the vignette. Generic
+   "plan-came-together" cinematic; not tied to any IP. */
+@keyframes lumina-triumph-fade {
+  0%   { opacity: 0; transform: scale(1.05); }
+  20%  { opacity: 1; transform: scale(1.00); }
+  80%  { opacity: 1; transform: scale(1.00); }
+  100% { opacity: 0; transform: scale(0.98); }
+}
+.lumina-triumph-fade {
+  animation: lumina-triumph-fade 4s ease-in-out forwards;
+}
+
+/* Lumina: crisis glitch — chromatic-aberration edges + scanlines.
+   Stays on the periphery so the avatar itself is never visually
+   corrupted (we don't want users to mistake the effect for a real
+   render bug). */
+@keyframes lumina-crisis-pulse {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.lumina-crisis-pulse {
+  animation: lumina-crisis-pulse 3s ease-out forwards;
+}
+
+@keyframes lumina-crisis-edge-shift {
+  0%   { box-shadow: inset 6px 0 0 rgba(255, 0, 0, 0.55), inset -6px 0 0 rgba(0, 255, 255, 0.55); }
+  50%  { box-shadow: inset -6px 0 0 rgba(255, 0, 0, 0.55), inset 6px 0 0 rgba(0, 255, 255, 0.55); }
+  100% { box-shadow: inset 6px 0 0 rgba(255, 0, 0, 0.55), inset -6px 0 0 rgba(0, 255, 255, 0.55); }
+}
+.lumina-crisis-edge {
+  animation: lumina-crisis-edge-shift 0.18s linear infinite;
+  border: 1px solid rgba(255, 0, 0, 0.0);
+}
+
+.lumina-crisis-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 80, 80, 0.0) 0px,
+    rgba(255, 80, 80, 0.0) 3px,
+    rgba(255, 80, 80, 0.10) 3px,
+    rgba(255, 80, 80, 0.10) 4px
+  );
+  mix-blend-mode: screen;
+}

@@ -1,0 +1,108 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Lumina: dev server",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "--",
+        "bash",
+        "-lc",
+        "\"$(wslpath -u '${workspaceFolder}')/scripts/start-dev.sh\""
+      ],
+      "linux": {
+        "command": "${workspaceFolder}/scripts/start-dev.sh",
+        "args": []
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent",
+        "echo": false,
+        "showReuseMessage": false,
+        "clear": false,
+        "group": "lumina-services"
+      },
+      "problemMatcher": [
+        {
+          "owner": "next-dev",
+          "pattern": [
+            { "regexp": "^.*$", "file": 1, "location": 2, "message": 3 }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*starting next dev.*|.*already responding.*",
+            "endsPattern": "^.*ready.*started server.*$|.*already responding.*"
+          }
+        }
+      ],
+      "runOptions": { "runOn": "folderOpen" }
+    },
+    {
+      "label": "Lumina: buddy bridge",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "--",
+        "bash",
+        "-lc",
+        "\"$(wslpath -u '${workspaceFolder}')/scripts/start-bridge.sh\""
+      ],
+      "linux": {
+        "command": "${workspaceFolder}/scripts/start-bridge.sh",
+        "args": []
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent",
+        "echo": false,
+        "showReuseMessage": false,
+        "clear": false,
+        "group": "lumina-services"
+      },
+      "problemMatcher": [
+        {
+          "owner": "buddy-bridge",
+          "pattern": [
+            { "regexp": "^.*$", "file": 1, "location": 2, "message": 3 }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "^\\[(buddy-bridge|start-bridge)\\]",
+            "endsPattern": "^\\[buddy-bridge\\] listening|.*already responding.*"
+          }
+        }
+      ],
+      "runOptions": { "runOn": "folderOpen" }
+    },
+    {
+      "label": "Lumina: claude",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "--",
+        "bash",
+        "-lc",
+        "cd \"$(wslpath -u '${workspaceFolder}')\" && exec claude"
+      ],
+      "linux": {
+        "command": "claude",
+        "args": [],
+        "options": { "cwd": "${workspaceFolder}" }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always",
+        "echo": false,
+        "showReuseMessage": false,
+        "clear": false,
+        "group": "claude"
+      },
+      "problemMatcher": [],
+      "runOptions": { "runOn": "folderOpen" }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "task.allowAutomaticTasks": "on",
+
+  "//": "Windows-native VS Code: default new terminals to WSL so .sh scripts and `claude` work. Remote-WSL VS Code ignores .windows settings and uses WSL natively.",
+  "terminal.integrated.profiles.windows": {
+    "WSL": {
+      "path": "wsl.exe",
+      "args": ["--cd", "${workspaceFolder}"]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "WSL",
+
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/reasoninghist/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/package-lock.json": true,
+    "**/reasoninghist/**": true,
+    "src/web/public/**": true
+  },
+
+  "livePreview.autoPreviewEnabled": false,
+  "livePreview.openPreviewTarget": "External Browser",
+  "livePreview.portNumber": 3002
+}

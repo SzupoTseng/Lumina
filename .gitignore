@@ -1,0 +1,170 @@
+# =============================================================================
+# Lumina .gitignore — what to NOT upload to GitHub.
+#
+# Audited on 2026-04-25. Three classes of exclusions:
+#   1. Build artifacts and dependencies (regenerable)
+#   2. Secrets, credentials, environment overrides (leak risk)
+#   3. License-sensitive user-supplied assets (.vrm, .vrma — per author terms)
+#
+# Anything not covered here lands in git. If you find yourself running
+# `git add -f` on something, ask first whether it really should ship.
+# =============================================================================
+
+
+# --- Node / Next.js build artifacts ------------------------------------------
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+build/
+coverage/
+.pnp/
+.pnp.js
+.pnpm-debug.log*
+
+# Lockfiles for tools we don't use (keep package-lock.json)
+yarn.lock
+pnpm-lock.yaml
+
+
+# --- Environment overrides + likely secret-bearing files ---------------------
+# `.local` suffix is the Next.js convention for "this machine only". Never
+# commit any of these. Empty .env (no suffix) is also blocked because users
+# put keys there too.
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+# Common credential file shapes — even if we don't use them today, drift
+# happens. Block at the file-extension and filename-substring levels.
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*credentials*
+*secrets*
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+.ssh/
+
+# Database files — block in case anyone drops a sqlite snapshot
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+
+
+# --- Logs and runtime files --------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/tmp/
+/tmp/buddy-bridge*.log
+/tmp/lumina-*.log
+.DS_Store
+
+
+# --- Auto-generated reasoning logs (Claude Code session telemetry) -----------
+# Match at any depth — the harness writes these into multiple locations.
+**/reasoninghist/
+
+
+# --- License-sensitive assets ------------------------------------------------
+# Each .vrm is governed by its original author's terms (VRoid Hub / Booth /
+# Mixamo / etc.). Tracking them in git risks accidental redistribution —
+# even when the author allows personal use, they often forbid republishing.
+# Keep .vrm/.vrma files locally only.
+#
+# `idle_loop.vrma` is the upstream default (MIT-licensed, ships with
+# ChatVRM) and is allow-listed so a fresh clone has a working idle loop.
+# Anything else under public/vrma/ is user-added and must be ignored.
+**/*.vrm
+**/*.vrm.bak
+src/web/public/vrma/
+src/web/public/vrm/
+!src/web/public/idle_loop.vrma
+
+# Personality JSON files ARE tracked — they're project source.
+# (No exclusion for src/web/public/personalities/*.json — committed.)
+
+# --- C# launcher build output ------------------------------------------------
+src/launcher/bin/
+src/launcher/obj/
+src/launcher/publish/
+
+# --- LuminaLauncher runtime data (user-specific) ----------------------------
+lumina-prefs.json
+lumina-debug.txt
+
+# --- WebView2 cache (created next to LuminaLauncher.exe) --------------------
+*.exe.WebView2/
+
+# --- Terminal server node_modules (rebuilt on first run) --------------------
+src/terminal/node_modules/
+
+# --- Claude Code project instructions (machine-specific, not for public repo) -
+CLAUDE.md
+
+# --- Debug logs --------------------------------------------------------------
+lumina-hook-debug.log
+
+
+# --- IDE / editor scratch ----------------------------------------------------
+.idea/
+.vs/
+*.iml
+*.swp
+*.swo
+*~
+*.bak
+.vscode/settings.local.json
+.vscode/launch.local.json
+.vscode/*.local.json
+
+
+# --- Dev-time scratch (typecheck commands during sessions) -------------------
+# `tsc --noEmit -p tsconfig.<scratch>.json` is a common iteration pattern.
+# Block names we've used; legitimate per-package tsconfigs use different
+# names (tsconfig.build.json, tsconfig.test.json) and are not blocked.
+src/web/tsconfig.buddy.json
+src/web/tsconfig.lumina.json
+
+
+# --- Compiled binaries / archives that shouldn't end up here -----------------
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.iso
+
+
+# --- OS noise ----------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.AppleDouble
+.LSOverride
+$RECYCLE.BIN/
+
+
+# --- Lumina-specific scratch -------------------------------------------------
+# Demo recording outputs (avoid committing 50 MB of GIF accidentally)
+demo/
+*.mov
+*.mp4
+docs/demo.gif
+!docs/demo.gif.placeholder

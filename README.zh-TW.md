@@ -14,6 +14,8 @@
 
 [English](README.md) &nbsp;·&nbsp; **繁體中文**
 
+[![觀看展示影片](https://img.youtube.com/vi/qHjv4FAWbUY/maxresdefault.jpg)](https://www.youtube.com/watch?v=qHjv4FAWbUY)
+
 ![Lumina — coding agents meet VRM buddy](Lumina.png)
 
 把三種 coding-AI CLI 任意一種的 hook 事件接到 3D 角色身上：選 agent、選 runtime、選模型、選人格。當 agent 編 Python 跟編 Rust 時表情不一樣，每次 `Edit`/`Bash` 完成都有對應反應。基於 [ChatVRM](https://github.com/zoan37/ChatVRM)（MIT, pixiv Inc.）並用統一的 hook adapter 把 Claude / Copilot / Codex 三種 stdin 形狀正規化成同一套事件 taxonomy。

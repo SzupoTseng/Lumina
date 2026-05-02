@@ -14,6 +14,8 @@
 
 **English** &nbsp;·&nbsp; [繁體中文](README.zh-TW.md)
 
+[![Watch the demo](https://img.youtube.com/vi/qHjv4FAWbUY/maxresdefault.jpg)](https://www.youtube.com/watch?v=qHjv4FAWbUY)
+
 ![Lumina — coding agents meet VRM buddy](Lumina.png)
 
 Hook events from any of three coding-AI CLIs → real-time reactions on a 3D character. Pick an agent, pick a runtime, pick a model, pick a personality. Watch it emote when the agent edits Python vs. Rust, hear it acknowledge `Edit` and `Bash` returns. Built on top of [ChatVRM](https://github.com/zoan37/ChatVRM) (MIT, pixiv Inc.) with a unified hook adapter that normalizes Claude / Copilot / Codex into one event taxonomy.

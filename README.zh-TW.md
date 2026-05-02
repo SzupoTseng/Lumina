@@ -14,8 +14,6 @@
 
 [English](README.md) &nbsp;·&nbsp; **繁體中文**
 
-[![觀看展示影片](https://img.youtube.com/vi/qHjv4FAWbUY/maxresdefault.jpg)](https://www.youtube.com/watch?v=qHjv4FAWbUY)
-
 ![Lumina — coding agents meet VRM buddy](Lumina.png)
 
 把三種 coding-AI CLI 任意一種的 hook 事件接到 3D 角色身上：選 agent、選 runtime、選模型、選人格。當 agent 編 Python 跟編 Rust 時表情不一樣，每次 `Edit`/`Bash` 完成都有對應反應。基於 [ChatVRM](https://github.com/zoan37/ChatVRM)（MIT, pixiv Inc.）並用統一的 hook adapter 把 Claude / Copilot / Codex 三種 stdin 形狀正規化成同一套事件 taxonomy。
@@ -30,6 +28,8 @@
 - **人格系統。** 在 `public/personalities/` 丟一個 JSON 就多一個人格（system prompt + 每事件台詞 override）。內建三種：傲嬌助手、熱血導師、冷酷黑客。
 - **兩種架構模式可切換。** Standalone bridge（預設、解耦）或 unified Next.js api routes（單一程序、單一 port）。一個環境變數切換。
 - **核心零依賴。** Bridge 是 ~110 行的 `node:http` + SSE。沒有 Express、沒有 `ws`、沒有 `body-parser`。
+
+[![觀看展示影片](https://img.youtube.com/vi/qHjv4FAWbUY/maxresdefault.jpg)](https://www.youtube.com/watch?v=qHjv4FAWbUY)
 
 ## 快速開始
 

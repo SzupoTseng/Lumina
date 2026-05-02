@@ -14,8 +14,6 @@
 
 **English** &nbsp;·&nbsp; [繁體中文](README.zh-TW.md)
 
-[![Watch the demo](https://img.youtube.com/vi/qHjv4FAWbUY/maxresdefault.jpg)](https://www.youtube.com/watch?v=qHjv4FAWbUY)
-
 ![Lumina — coding agents meet VRM buddy](Lumina.png)
 
 Hook events from any of three coding-AI CLIs → real-time reactions on a 3D character. Pick an agent, pick a runtime, pick a model, pick a personality. Watch it emote when the agent edits Python vs. Rust, hear it acknowledge `Edit` and `Bash` returns. Built on top of [ChatVRM](https://github.com/zoan37/ChatVRM) (MIT, pixiv Inc.) with a unified hook adapter that normalizes Claude / Copilot / Codex into one event taxonomy.
@@ -31,6 +29,8 @@ Most "AI dev buddy" projects either roleplay through chat or visualize editor st
 - **Personality system.** Drop a JSON file in `public/personalities/`, get a new system prompt + per-event reaction overrides. Three samples ship: *Tsundere Assistant*, *Hot-blooded Mentor*, *Cold Hacker*.
 - **Two architecture modes.** Standalone bridge (default, decoupled) or unified Next.js api routes (one process, one port). Toggle with one env var.
 - **Zero-dep core.** The bridge is ~110 lines of `node:http` + SSE. No Express, no `ws`, no `body-parser`.
+
+[![Watch the demo](https://img.youtube.com/vi/qHjv4FAWbUY/maxresdefault.jpg)](https://www.youtube.com/watch?v=qHjv4FAWbUY)
 
 ## Quick start
 

@@ -6,6 +6,8 @@ import { VRMLookAtSmootherLoaderPlugin } from "@/lib/VRMLookAtSmootherLoaderPlug
 import { LipSync } from "../lipSync/lipSync";
 import { EmoteController } from "../emoteController/emoteController";
 import { Screenplay } from "../messages/messages";
+import { applyWind, windForPowerMode } from "../vrmWind/vrmWind";
+import { loadPowerMode } from "../powerMode/powerMode";
 
 /**
  * 3Dキャラクターを管理するクラス
@@ -111,6 +113,13 @@ export class Model {
 
     this.emoteController?.update(delta);
     this.mixer?.update(delta);
+
+    // Modulate spring-bone gravityDir BEFORE vrm.update so the spring
+    // simulation reads our wind-tilted gravity on this same tick.
+    if (this.vrm) {
+      applyWind(this.vrm, performance.now() / 1000, windForPowerMode(loadPowerMode()));
+    }
+
     this.vrm?.update(delta);
   }
 }

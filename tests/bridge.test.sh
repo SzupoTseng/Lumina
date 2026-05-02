@@ -97,8 +97,9 @@ H=$(curl -sI -X OPTIONS \
       -H "Origin: http://localhost:3000" \
       -H "Access-Control-Request-Method: POST" \
       "$BASE/event")
-echo "$H" | grep -qi 'access-control-allow-origin: \*' \
-  && pass "OPTIONS preflight allows cross-origin" \
+# Bridge echoes the specific Origin for localhost requests (tighter than `*`).
+echo "$H" | grep -qiE 'access-control-allow-origin: https?://(localhost|127\.0\.0\.1)(:[0-9]+)?[[:space:]]*$' \
+  && pass "OPTIONS preflight echoes localhost Origin (secure variant of CORS)" \
   || fail "CORS preflight" "got headers:\n$H"
 
 echo

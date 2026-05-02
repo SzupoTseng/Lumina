@@ -53,12 +53,29 @@ type Key =
   | "hooks.install"
   | "hooks.uninstall"
   | "hooks.installing"
+  | "hooks.viewJson"
+  | "hooks.hideJson"
+  | "hooks.config.title"
+  | "hooks.config.missing"
+  | "hooks.config.codexFlagOff"
+  | "hooks.copyPath"
+  | "hooks.copied"
+  | "settings.advanced"
+  | "settings.bubbleDuration"
+  | "settings.memoryStream"
+  | "settings.achievements"
+  | "settings.reset"
+  | "settings.resetConfirm"
+  | "ui.on"
+  | "ui.off"
   | "log.title"
   | "log.empty"
   | "log.clear"
   | "ui.refresh"
   | "ui.bridge.restart.confirm"
   | "ui.bridge.restart.fail"
+  | "ui.bridge.reminder.prefix"
+  | "ui.bridge.reminder.suffix"
   | "demo.title"
   | "demo.cat.slash"
   | "demo.cat.emotion"
@@ -92,12 +109,29 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     "hooks.install": "安裝",
     "hooks.uninstall": "移除",
     "hooks.installing": "…",
+    "hooks.viewJson": "看 JSON",
+    "hooks.hideJson": "收起",
+    "hooks.config.title": "Hook 設定",
+    "hooks.config.missing": "（檔案不存在 — 此 agent CLI 可能未安裝）",
+    "hooks.config.codexFlagOff": "⚠️ ~/.codex/config.toml 缺少 [features] codex_hooks=true，hook 不會觸發",
+    "hooks.copyPath": "複製路徑",
+    "hooks.copied": "✓",
+    "settings.advanced": "進階設定",
+    "settings.bubbleDuration": "對話泡泡持續時間",
+    "settings.memoryStream": "記憶流",
+    "settings.achievements": "成就通知",
+    "settings.reset": "重設",
+    "settings.resetConfirm": "確定要重設所有 Lumina 設定嗎？",
+    "ui.on": "開",
+    "ui.off": "關",
     "log.title": "Buddy Log",
     "log.empty": "尚無紀錄",
     "log.clear": "清除",
     "ui.refresh": "重新整理",
     "ui.bridge.restart.confirm": "Bridge 已停止。重新啟動？",
     "ui.bridge.restart.fail": "Bridge 重啟失敗，請手動執行 scripts/start-bridge.sh",
+    "ui.bridge.reminder.prefix": "Bridge 已斷線 ",
+    "ui.bridge.reminder.suffix": " 分鐘，請檢查連線。要立即重啟嗎？",
     "demo.title": "互動測試",
     "demo.cat.slash": "Slash Commands",
     "demo.cat.emotion": "情緒測試",
@@ -130,12 +164,29 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     "hooks.install": "Install",
     "hooks.uninstall": "Remove",
     "hooks.installing": "…",
+    "hooks.viewJson": "View JSON",
+    "hooks.hideJson": "Hide",
+    "hooks.config.title": "Hook config",
+    "hooks.config.missing": "(file not found — agent CLI probably not installed)",
+    "hooks.config.codexFlagOff": "⚠️ ~/.codex/config.toml missing [features] codex_hooks=true — hooks won't fire",
+    "hooks.copyPath": "Copy path",
+    "hooks.copied": "✓",
+    "settings.advanced": "Advanced",
+    "settings.bubbleDuration": "Bubble duration",
+    "settings.memoryStream": "Memory stream",
+    "settings.achievements": "Achievement toasts",
+    "settings.reset": "Reset",
+    "settings.resetConfirm": "Reset all Lumina settings to defaults?",
+    "ui.on": "On",
+    "ui.off": "Off",
     "log.title": "Buddy Log",
     "log.empty": "No entries yet",
     "log.clear": "Clear",
     "ui.refresh": "Refresh",
     "ui.bridge.restart.confirm": "Bridge is down. Restart it?",
     "ui.bridge.restart.fail": "Failed to restart bridge. Run scripts/start-bridge.sh manually.",
+    "ui.bridge.reminder.prefix": "Bridge has been disconnected for ",
+    "ui.bridge.reminder.suffix": " minute(s). Please check. Restart now?",
     "demo.title": "Demo",
     "demo.cat.slash": "Slash Commands",
     "demo.cat.emotion": "Emotions",
@@ -168,12 +219,29 @@ const STRINGS: Record<Locale, Record<Key, string>> = {
     "hooks.install": "インストール",
     "hooks.uninstall": "削除",
     "hooks.installing": "…",
+    "hooks.viewJson": "JSONを見る",
+    "hooks.hideJson": "閉じる",
+    "hooks.config.title": "Hook 設定",
+    "hooks.config.missing": "（ファイルが存在しません — agent CLI 未インストールの可能性）",
+    "hooks.config.codexFlagOff": "⚠️ ~/.codex/config.toml に [features] codex_hooks=true がありません — hookが発火しません",
+    "hooks.copyPath": "パスをコピー",
+    "hooks.copied": "✓",
+    "settings.advanced": "詳細設定",
+    "settings.bubbleDuration": "吹き出し表示時間",
+    "settings.memoryStream": "メモリーストリーム",
+    "settings.achievements": "達成通知",
+    "settings.reset": "リセット",
+    "settings.resetConfirm": "Lumina の設定をすべてリセットしますか？",
+    "ui.on": "オン",
+    "ui.off": "オフ",
     "log.title": "Buddy Log",
     "log.empty": "記録なし",
     "log.clear": "クリア",
     "ui.refresh": "更新",
     "ui.bridge.restart.confirm": "Bridgeが停止しています。再起動しますか？",
     "ui.bridge.restart.fail": "Bridgeの再起動に失敗しました。scripts/start-bridge.shを手動で実行してください。",
+    "ui.bridge.reminder.prefix": "Bridgeが切断されてから ",
+    "ui.bridge.reminder.suffix": " 分経過しました。確認してください。今すぐ再起動しますか？",
     "demo.title": "デモ",
     "demo.cat.slash": "スラッシュコマンド",
     "demo.cat.emotion": "感情テスト",

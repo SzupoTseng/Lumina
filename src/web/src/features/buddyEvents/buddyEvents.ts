@@ -32,12 +32,57 @@ function L(zh: string, en: string, ja: string): string {
 
 type EmotionPreset = "neutral" | "happy" | "angry" | "sad" | "relaxed";
 
+// AgentId now lives in src/features/agents/agents.ts. Re-exported here for
+// back-compat with existing imports of `BuddyEvent['agent']`.
+export type { AgentId } from "@/features/agents/agents";
+import type { AgentId } from "@/features/agents/agents";
+
 export type BuddyEvent = {
   type: string;
   ts?: number;
   tool?: string | null;
   session?: string | null;
+  // agent: which CLI fired this event. Optional for back-compat with hook
+  // payloads from before multi-agent support; defaults to "claude" when read.
+  agent?: AgentId;
   context?: unknown;
+};
+
+// Per-agent tool-name → canonical tool key. The reaction tables (toolLines,
+// LANGUAGE_REACTIONS gate, GIT_OPS gate, TOOL_RESULT_REACTIONS) all key on
+// Claude's tool taxonomy (Bash | Edit | Write | Read | NotebookEdit). When
+// codex or copilot fires an event with a different tool name, normalize it
+// here so downstream resolution is agent-agnostic.
+//
+// Codex uses the same names as Claude for the common tools, plus apply_patch
+// for file edits — map that to "Edit". Copilot uses lowercase variants.
+const TOOL_NORMALIZE: Record<AgentId, Record<string, string>> = {
+  claude: {},
+  codex: {
+    apply_patch: "Edit",
+  },
+  copilot: {
+    bash: "Bash",
+    shell: "Bash",
+    edit: "Edit",
+    write: "Write",
+    read: "Read",
+    str_replace: "Edit",
+    str_replace_based_edit_tool: "Edit",
+  },
+};
+
+const normalizeTool = (agent: AgentId, tool: string | null | undefined): string | null => {
+  if (!tool) return null;
+  const map = TOOL_NORMALIZE[agent] ?? {};
+  return map[tool] ?? tool;
+};
+
+// Welcome line per agent. Falls back to claude for any unrecognized agent id.
+const AGENT_WELCOME: Record<AgentId, () => string> = {
+  claude:  () => L("👋 Claude 來上班了。",  "👋 Claude is here.",  "👋 クロードが来た。"),
+  copilot: () => L("👋 Copilot 來上班了。", "👋 Copilot is here.", "👋 Copilotが来た。"),
+  codex:   () => L("👋 Codex 來上班了。",   "👋 Codex is here.",   "👋 Codexが来た。"),
 };
 
 // Personality override layer. Highest priority on resolution; reactions map
@@ -493,6 +538,33 @@ export function connectBuddyEvents(
     const reaction = REACTIONS[evt.type];
     if (!reaction) return;
 
+    // Normalize per-agent tool name + stdin shape into Claude's canonical
+    // taxonomy so the reaction tables and detectors work uniformly. The
+    // detectors read evt.context.tool_input.{file_path,command} — Copilot
+    // uses toolArgs (JSON-encoded string) and toolName, so we hoist its
+    // fields here once. Local clone, original unchanged.
+    const agent: AgentId = (evt.agent as AgentId) ?? "claude";
+    const nEvt: BuddyEvent = (() => {
+      if (agent !== "copilot") {
+        return { ...evt, tool: normalizeTool(agent, evt.tool ?? null) };
+      }
+      // Copilot adapter: parse toolArgs and re-shape into Claude's tool_input.
+      const ctx = (evt.context as { toolName?: string; toolArgs?: string }) ?? {};
+      let parsedArgs: Record<string, unknown> = {};
+      if (typeof ctx.toolArgs === "string") {
+        try { parsedArgs = JSON.parse(ctx.toolArgs); }
+        catch { parsedArgs = {}; }
+      }
+      return {
+        ...evt,
+        tool: normalizeTool("copilot", ctx.toolName ?? evt.tool ?? null),
+        context: {
+          ...(evt.context as object | null ?? {}),
+          tool_input: parsedArgs,
+        },
+      };
+    })();
+
     // Resolution order (last wins on each axis):
     //   emotion: base → language → git → personality.defaultEmotion
     //            (default skipped when language or git carry semantic intent)
@@ -501,17 +573,21 @@ export function connectBuddyEvents(
     let emotion = reaction.emotion;
     // All line fields are now () => string for locale-awareness; call them to get the string.
     let line: string | undefined = reaction.line?.();
-    if (reaction.toolLines && evt.tool && reaction.toolLines[evt.tool]) {
-      line = reaction.toolLines[evt.tool]();
+    // Agent-specific welcome on SessionStart.
+    if (nEvt.type === "SessionStart" && AGENT_WELCOME[agent]) {
+      line = AGENT_WELCOME[agent]();
+    }
+    if (reaction.toolLines && nEvt.tool && reaction.toolLines[nEvt.tool]) {
+      line = reaction.toolLines[nEvt.tool]();
     }
 
-    const lang = detectLanguage(evt);
+    const lang = detectLanguage(nEvt);
     if (lang && LANGUAGE_REACTIONS[lang]) {
       emotion = LANGUAGE_REACTIONS[lang].emotion;
       line = LANGUAGE_REACTIONS[lang].line();
     }
 
-    const git = detectGit(evt);
+    const git = detectGit(nEvt);
     if (git && GIT_REACTIONS[git.op]) {
       const r = GIT_REACTIONS[git.op];
       emotion = r.emotion;
@@ -533,7 +609,7 @@ export function connectBuddyEvents(
 
     // Tool-result interpretation: more specific than git/lang/tool, since it
     // reflects the *outcome* of what just ran. Wins over those layers.
-    const result = detectToolResult(evt);
+    const result = detectToolResult(nEvt);
     let resultKey: ResultReactionKey | null = null;
     if (result) {
       resultKey = resultReactionKeyFor(result);
@@ -554,13 +630,18 @@ export function connectBuddyEvents(
         const resultPersonalityKey = resultKey ? `result.${resultKey}` : null;
         const gitKey = git ? `git.${git.op}` : null;
         const langKey = lang ? `lang.${lang}` : null;
-        const toolKey = evt.tool ? `tool.${evt.tool}` : null;
+        // Personality keys use the canonical (normalized) tool name so a single
+        // personality file works across all three agents.
+        const toolKey = nEvt.tool ? `tool.${nEvt.tool}` : null;
+        const agentKey = `agent.${agent}`;
         const override =
           (resultPersonalityKey && r[resultPersonalityKey]) ||
           (gitKey && r[gitKey]) ||
           (langKey && r[langKey]) ||
           (toolKey && r[toolKey]) ||
-          r[evt.type] ||
+          r[`${nEvt.type}.${agent}`] ||
+          r[agentKey] ||
+          r[nEvt.type] ||
           null;
         if (override) line = override;
       }

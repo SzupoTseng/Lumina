@@ -8,7 +8,7 @@
 // Rendering nothing while the discovery fetch is in flight, and nothing if
 // no personality files are present — keeps the UI clean for fresh installs.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { buildUrl } from "@/utils/buildUrl";
 import { SELECTED_PERSONALITY_STORAGE_KEY } from "@/features/constants/vrmConstants";
 import { useT, useLocale } from "@/features/i18n/i18n";
@@ -65,6 +65,18 @@ export function PersonalitySelector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Re-scan public/personalities/ each time the dropdown is opened so newly
+  // dropped-in *.json files appear without a page reload.
+  const refresh = useCallback(async () => {
+    try {
+      const r = await fetch(buildUrl("/api/personalities"));
+      if (!r.ok) return;
+      const data = (await r.json()) as { personalities?: Personality[] };
+      const list = Array.isArray(data.personalities) ? data.personalities : [];
+      setPersonalities(list);
+    } catch {}
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
     setSelectedId(id);
@@ -114,6 +126,8 @@ export function PersonalitySelector({
         id="lumina-personality-selector"
         value={selectedId}
         onChange={handleChange}
+        onMouseDown={refresh}
+        onFocus={refresh}
         aria-label="Select personality"
         className="bg-primary text-white px-3 py-2 rounded-md border border-primary-hover text-sm cursor-pointer hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary"
       >

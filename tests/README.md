@@ -12,10 +12,13 @@ real bridge / hooks / scripts.
 
 # Single section:
 ./scripts/test.sh detection      # 74 unit tests, ~120 ms
+./scripts/test.sh normalize      # 20 unit tests — per-agent tool/context normalization
 ./scripts/test.sh state          # 15 unit tests
 ./scripts/test.sh bridge         # bridge integration (~5 s)
-./scripts/test.sh hook           # hook adapter integration
-./scripts/test.sh scripts        # idempotency contracts
+./scripts/test.sh hook           # hook adapter (claude single-arg, back-compat path)
+./scripts/test.sh multihook      # hook adapter (claude/copilot/codex per-agent envelope)
+./scripts/test.sh install        # install-hooks.sh idempotency + dedupe + per-agent paths
+./scripts/test.sh scripts        # idempotency contracts (start-bridge, start-dev)
 ./scripts/test.sh web            # web integration (boots dev server if needed)
 ```
 
@@ -24,13 +27,16 @@ real bridge / hooks / scripts.
 | File | Type | Tests | Covers |
 |------|------|-------|--------|
 | `detection.test.mjs` | `node:test` unit | 74 | Language extension detection, git op detection (incl. branch/message extraction, conflict detection), tool-result parsing (pytest/jest/cargo test/go test), dangerous-command patterns, slash-command routing, long-task command detection, achievement fix-message regex |
+| `multi-agent-normalize.test.mjs` | `node:test` unit | 20 | Per-agent `TOOL_NORMALIZE` (claude noop, codex `apply_patch→Edit`, copilot lowercase aliases), Copilot `toolArgs` JSON-string → `tool_input` rewriter, immutability of original event, agent-scoped maps don't bleed across agents, `AGENT_WELCOME` registration completeness |
 | `state.test.mjs` | `node:test` unit | 15 | Memory-stream reminiscence picker (positive entry, age formatting, 7-day window), achievement threshold + unlock filtering, agent monitor edit-loop / edit-revert detection (including time-window expiry), task tracker upsert + status transitions |
 | `bridge.test.sh` | bash integration | 7 | `scripts/buddy-bridge.mjs` end-to-end: `/health`, `POST /event`, SSE delivery (hello + broadcast + full context), listener count, malformed JSON → 400, unknown route → 404, CORS preflight |
-| `hook.test.sh` | bash integration | 5 | `scripts/buddy-hook.sh` envelope shape (type/tool/session/context preservation), exit-0 contract when bridge unreachable, empty-stdin handling, max-time 1s adherence |
+| `hook.test.sh` | bash integration | 5 | `scripts/buddy-hook.sh` envelope shape (type/tool/session/context preservation), exit-0 contract when bridge unreachable, empty-stdin handling, max-time 1s adherence — **single-arg back-compat path** (no agent specified) |
+| `multi-agent-hook.test.sh` | bash integration | 14 | `scripts/buddy-hook.sh <event> <agent>` for all three CLIs: per-agent stdin extraction (Claude/Codex `tool_name`+`session_id` vs Copilot `toolName`+null), nested context preservation, exit-0 + 1s-timeout contracts enforced **per agent**, missing-agent-arg defaults to `claude`, `agent` field always present even on empty stdin |
+| `install-hooks.test.sh` | bash integration | 14 | `scripts/install-hooks.sh` per-agent file paths (claude `~/.claude/settings.json`, codex `~/.codex/hooks.json` + `config.toml` flag, copilot `<project>/.github/hooks/lumina.json` with both `bash` and `powershell` keys), idempotent re-runs (sha256 stable), **dedupe by trailing filename** (existing entry at OLD path gets repathed not duplicated), preservation of unrelated user keys (`permissions`, `statusLine`), `ONLY_AGENT` filter, codex's lifecycle skips `SessionEnd`/`Notification` |
 | `scripts.test.sh` | bash integration | 6 | `start-bridge.sh` and `start-dev.sh` idempotency: fresh start works, second invocation exits 0 quickly with "already responding" message |
 | `web.test.sh` | bash integration | 12 | Next.js dev server end-to-end: HTTP 200 on `/`, HTML contains `#__next` + `<canvas>` + M_PLUS_2 font, `/api/models` JSON shape + `Cache-Control: no-store`, `/api/personalities` includes tsundere/mentor/goth, `/idle_loop.vrma` reachable, unknown path → 404. **Verified passing 12/12 against `~/lumina-runtime/` on 2026-04-26** — see CLAUDE.md "Root cause of next dev silently exiting" for why the project must run from native WSL FS for this section to work. |
 
-**Total: 119 tests** when full suite runs.
+**Total: 167 tests** when full suite runs (119 baseline + 48 multi-agent: 14 hook + 14 install + 20 normalize).
 
 ## Why some tests duplicate regex inline
 

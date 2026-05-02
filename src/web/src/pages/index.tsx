@@ -54,6 +54,13 @@ import {
   type MemoryState,
 } from "@/features/memoryStream/memoryStream";
 import {
+  loadSettings as loadLuminaSettings,
+  subscribeSettings as subscribeLuminaSettings,
+  DEFAULT_SETTINGS as DEFAULT_LUMINA_SETTINGS,
+  type LuminaSettings,
+} from "@/features/luminaSettings/luminaSettings";
+import { isAgentId, DEFAULT_AGENT, type AgentId } from "@/features/agents/agents";
+import {
   feedEvent as feedMonitorEvent,
   emptyState as emptyMonitorState,
   type AgentMonitorState,
@@ -122,9 +129,9 @@ export default function Home() {
       const params = JSON.parse(
         window.localStorage.getItem("chatVRMParams") as string
       );
-      setSystemPrompt(params.systemPrompt);
-      setElevenLabsParam(params.elevenLabsParam);
-      setChatLog(params.chatLog);
+      if (typeof params.systemPrompt === "string") setSystemPrompt(params.systemPrompt);
+      if (params.elevenLabsParam?.voiceId) setElevenLabsParam(params.elevenLabsParam);
+      if (Array.isArray(params.chatLog)) setChatLog(params.chatLog);
     }
     if (window.localStorage.getItem("elevenLabsKey")) {
       const key = window.localStorage.getItem("elevenLabsKey") as string;
@@ -201,10 +208,40 @@ export default function Home() {
   // SSR-safe: start with empty state to avoid hydration mismatch,
   // then load from localStorage in useEffect (client-only).
   const [taskState, setTaskState] = useState<TaskTrackerState>({ version: 1, tasks: {}, order: [] });
+  // Currently observed coding-AI agent (claude / copilot / codex). Tracked
+  // from the `agent` field on every incoming hook event; persisted so the
+  // demo panel matches the runtime even before any event has fired in this
+  // tab. Defaults to claude for back-compat with payloads that pre-date the
+  // agent field.
+  const [currentAgent, setCurrentAgent] = useState<AgentId>(() => {
+    if (typeof window === "undefined") return DEFAULT_AGENT;
+    // ?agent=<id> wins over stored value — the launcher passes this so a
+    // freshly-picked agent is reflected in the UI before any hook fires.
+    const fromUrl = new URLSearchParams(window.location.search).get("agent");
+    if (isAgentId(fromUrl)) {
+      try { window.localStorage.setItem("lumina.currentAgent", fromUrl); } catch { /* noop */ }
+      return fromUrl;
+    }
+    const v = window.localStorage.getItem("lumina.currentAgent");
+    return isAgentId(v) ? v : DEFAULT_AGENT;
+  });
   useEffect(() => { setTaskState(loadTaskState()); }, []);
 
   // Memory stream — append-only log of significant events. Held in a ref
   // (no UI binding except the SessionStart reminiscence override below).
+  // Live ref to user-tunable Lumina settings (bubble duration, memory toggle,
+  // achievement toggle). Re-read on every settings change so consumers inside
+  // long-lived closures (the SSE onAfterApply, etc.) always see fresh values
+  // without needing to re-subscribe React state.
+  const luminaSettingsRef = useRef<LuminaSettings>(
+    typeof window === "undefined" ? DEFAULT_LUMINA_SETTINGS : loadLuminaSettings(),
+  );
+  useEffect(() => {
+    const sync = () => { luminaSettingsRef.current = loadLuminaSettings(); };
+    sync();
+    return subscribeLuminaSettings(sync);
+  }, []);
+
   const memoryRef = useRef<MemoryState | null>(null);
   if (memoryRef.current === null && typeof window !== "undefined") {
     memoryRef.current = loadMemory();
@@ -276,20 +313,36 @@ export default function Home() {
         if (chatProcessingRef.current || isAISpeakingRef.current) return;
         if (clearTimer) clearTimeout(clearTimer);
 
-        // SessionStart reminiscence override
+        // SessionStart reminiscence override (skipped if memory stream is off)
         let resolved = text;
         if (
+          luminaSettingsRef.current.memoryStreamEnabled &&
           memoryRef.current &&
-          (text.startsWith("👋") || text.includes("Claude 來上班了"))
+          (text.startsWith("👋") || text.includes("來上班了"))
         ) {
           const memory = pickReminiscence(memoryRef.current);
           if (memory) resolved = memory;
         }
         setAssistantMessage(resolved);   // display only (appendBuddyLog already ran above)
-        clearTimer = setTimeout(() => setAssistantMessage(""), 4000);
+        clearTimer = setTimeout(
+          () => setAssistantMessage(""),
+          luminaSettingsRef.current.bubbleDurationMs,
+        );
       },
       personalityRef,
       onAfterApply: (evt) => {
+        // Track which agent fired this event so the DemoPanel and any other
+        // agent-aware UI can adapt. Persist so the next page load already
+        // knows the right agent before the first event fires.
+        const evtAgent = (evt as { agent?: unknown }).agent;
+        if (isAgentId(evtAgent)) {
+          setCurrentAgent((prev) => {
+            if (prev === evtAgent) return prev;
+            try { window.localStorage.setItem("lumina.currentAgent", evtAgent); } catch { /* noop */ }
+            return evtAgent;
+          });
+        }
+
         // Slash command routing: when the user types a `/...` prompt,
         // route it through existing IP-safe overlays. UserPromptSubmit
         // hook context carries `prompt` — see Claude Code hook docs.
@@ -331,15 +384,20 @@ export default function Home() {
         // Feed the same event into the achievement counters. Pure-function
         // call; we round-trip state through the ref + localStorage rather
         // than React state to keep the SSE connection lifecycle stable.
+        // Achievement detection always runs (so totals stay accurate even if
+        // the user disables the toast); only the *visible* popup is gated.
         if (achievementsRef.current) {
           const result = feedAchievementEvent(achievementsRef.current, evt);
           achievementsRef.current = result.state;
           if (result.unlocked.length > 0) {
             saveAchievementState(result.state);
-            setAchievementToast(result.unlocked[0]);
+            if (luminaSettingsRef.current.achievementToastsEnabled) {
+              setAchievementToast(result.unlocked[0]);
+            }
             // Also push achievement unlocks into the memory stream so the
-            // next session can reminisce about them.
-            if (memoryRef.current) {
+            // next session can reminisce about them. Skipped when memory
+            // stream is disabled (privacy/scope-down preference).
+            if (luminaSettingsRef.current.memoryStreamEnabled && memoryRef.current) {
               for (const a of result.unlocked) {
                 memoryRef.current = recordAchievementMemory(
                   memoryRef.current,
@@ -368,8 +426,9 @@ export default function Home() {
           return result.changed ? result.state : current;
         });
 
-        // Feed the same event into the memory stream.
-        if (memoryRef.current) {
+        // Feed the same event into the memory stream (gated on the toggle —
+        // off means no recording at all, so future SessionStart can't recall).
+        if (luminaSettingsRef.current.memoryStreamEnabled && memoryRef.current) {
           const result = feedMemoryEvent(memoryRef.current, evt);
           if (result.changed) {
             memoryRef.current = result.state;
@@ -433,7 +492,12 @@ export default function Home() {
         if (alert && !chatProcessingRef.current && !isAISpeakingRef.current) {
           if (clearTimer) clearTimeout(clearTimer);
           setAssistantMessageAndLog(alert.line);
-          clearTimer = setTimeout(() => setAssistantMessage(""), 5000);
+          // Monitor alerts use a +1s slack over the user's bubble duration
+          // so high-severity warnings linger long enough to register.
+          clearTimer = setTimeout(
+            () => setAssistantMessage(""),
+            luminaSettingsRef.current.bubbleDurationMs + 1000,
+          );
           try {
             viewer.model?.emoteController?.playEmotion(alert.emotion);
           } catch {
@@ -693,6 +757,7 @@ export default function Home() {
       <StatusBar />
       <StatusPanel info={statusInfo} />
       <DemoPanel
+        agent={currentAgent}
         onMessage={setAssistantMessageAndLog}
         onEmotion={(e) => viewer.model?.emoteController?.playEmotion(e)}
         onEffect={(kind, msg, dur) => {
@@ -714,6 +779,7 @@ export default function Home() {
         onPowerModeChange={handlePowerModeChange}
         buddyLogEntries={buddyLogEntries}
         onClearBuddyLog={clearBuddyLog}
+        agent={currentAgent}
       />
       <AchievementToast
         achievement={achievementToast}

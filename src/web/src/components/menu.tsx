@@ -244,7 +244,6 @@ export const Menu = ({
               iconName="24/CommentFill"
               label="Conversation Log"
               isProcessing={false}
-              disabled={chatLog.length <= 0}
               onClick={() => setShowChatLog(true)}
             />
           )}

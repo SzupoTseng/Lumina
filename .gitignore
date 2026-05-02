@@ -92,6 +92,9 @@ yarn-error.log*
 src/web/public/vrma/
 src/web/public/vrm/
 !src/web/public/idle_loop.vrma
+**/*.glb
+**/*.gltf
+**/*.fbx
 
 # Personality JSON files ARE tracked — they're project source.
 # (No exclusion for src/web/public/personalities/*.json — committed.)

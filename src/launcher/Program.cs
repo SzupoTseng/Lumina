@@ -51,27 +51,43 @@ internal static class Program
         string chosenDir = defaultDir;
         bool openClaude = prefs.OpenClaude;
         bool skipSetup = prefs.SkipSetup;
+        string agent = prefs.Agent;
+        string runtime = prefs.Runtime;
 
         if (forceSetup || !skipSetup || string.IsNullOrEmpty(prefs.LastDir) || !Directory.Exists(prefs.LastDir))
         {
-            using var setup = new SetupDialog(defaultDir, prefs.OpenClaude, prefs.SkipSetup);
+            using var setup = new SetupDialog(defaultDir, prefs.OpenClaude, prefs.SkipSetup, prefs.Agent, prefs.Runtime);
             if (setup.ShowDialog() != DialogResult.OK) return;
             chosenDir = setup.ChosenDir;
             openClaude = setup.OpenClaude;
             skipSetup = setup.SkipSetup;
+            agent = setup.Agent;
+            runtime = setup.Runtime;
         }
 
         prefs.LastDir    = chosenDir;
         prefs.OpenClaude = openClaude;
         prefs.SkipSetup  = skipSetup;
+        prefs.Agent      = agent;
+        prefs.Runtime    = runtime;
         prefs.Save();
 
-        StartBackground(chosenDir, startTerminal: openClaude);
+        // Best-effort hook install for the chosen agent. Non-fatal: a missing
+        // CLI just means the avatar won't react to that agent's events.
+        try { InstallHooks(chosenDir, agent, runtime); } catch { }
+
+        StartBackground(chosenDir, agent, runtime, startTerminal: openClaude);
         Application.Run(new SplitWindow(chosenDir, openClaude, prefs));
     }
 
-    internal static void StartBackground(string winDir, bool startTerminal = false)
+    internal static void StartBackground(string winDir, string agent = "claude", string runtime = "wsl", bool startTerminal = false)
     {
+        if (runtime.Equals("windows", StringComparison.OrdinalIgnoreCase))
+        {
+            StartBackgroundWindows(winDir, agent, startTerminal);
+            return;
+        }
+
         var wslRoot = ToWslPath(winDir);
         if (string.IsNullOrEmpty(wslRoot)) return;
 
@@ -83,10 +99,68 @@ internal static class Program
             $"nohup bash '{wslRoot}/scripts/status-bridge.sh' >/tmp/lumina-status.log 2>&1 &"
         };
         if (startTerminal)
-            // Uses systemd-run so the server survives after this session ends
-            commands.Add($"bash '{wslRoot}/scripts/start-terminal.sh' '{wslRoot}' &");
+            // Uses systemd-run so the server survives after this session ends.
+            // Second arg is the agent name → start-terminal.sh maps to a CLI binary.
+            commands.Add($"bash '{wslRoot}/scripts/start-terminal.sh' '{wslRoot}' '{agent}' &");
 
         RunWsl($"bash -lc \"{string.Join(" ", commands)}\"");
+    }
+
+    static void StartBackgroundWindows(string winDir, string agent, bool startTerminal)
+    {
+        // Bridge + dev server still run in WSL — those are the Next.js + bridge
+        // services, agent-runtime independent. Only the terminal panel is what
+        // changes when runtime=windows.
+        var wslRoot = ToWslPath(winDir);
+        if (!string.IsNullOrEmpty(wslRoot))
+        {
+            var bridgeCmds = new List<string>
+            {
+                $"bash '{wslRoot}/scripts/start-bridge.sh' &",
+                $"bash '{wslRoot}/scripts/start-dev.sh' &",
+                $"nohup bash '{wslRoot}/scripts/status-bridge.sh' >/tmp/lumina-status.log 2>&1 &"
+            };
+            RunWsl($"bash -lc \"{string.Join(" ", bridgeCmds)}\"");
+        }
+
+        if (startTerminal)
+        {
+            var ps1 = Path.Combine(winDir, "scripts", "start-terminal.ps1");
+            if (!File.Exists(ps1)) return;
+            try
+            {
+                Process.Start(new ProcessStartInfo("powershell.exe",
+                    $"-NoProfile -ExecutionPolicy Bypass -File \"{ps1}\" -Cwd \"{winDir}\" -Agent \"{agent}\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+            }
+            catch { }
+        }
+    }
+
+    static void InstallHooks(string winDir, string agent, string runtime)
+    {
+        if (runtime.Equals("windows", StringComparison.OrdinalIgnoreCase))
+        {
+            var ps1 = Path.Combine(winDir, "scripts", "install-hooks.ps1");
+            if (!File.Exists(ps1)) return;
+            Process.Start(new ProcessStartInfo("powershell.exe",
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{ps1}\" -Cwd \"{winDir}\" -Agent \"{agent}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+        }
+        else
+        {
+            var wslRoot = ToWslPath(winDir);
+            if (string.IsNullOrEmpty(wslRoot)) return;
+            RunWsl($"bash -lc \"bash '{wslRoot}/scripts/install-hooks.sh' '{wslRoot}' '{agent}'\"");
+        }
     }
 
     static void RunWsl(string bashCmd) =>
@@ -147,8 +221,10 @@ sealed class WindowPrefs
     public bool   Maximized     { get; set; } = true;
     public int    SplitterDist  { get; set; } = -1;
     public string LastDir       { get; set; } = "";
-    public bool   OpenClaude    { get; set; } = true;
+    public bool   OpenClaude    { get; set; } = true;   // Kept for back-compat: "embed terminal" toggle
     public bool   SkipSetup     { get; set; } = false;
+    public string Agent         { get; set; } = "claude";  // claude | copilot | codex
+    public string Runtime       { get; set; } = "wsl";     // wsl | windows
 
     public static WindowPrefs Load()
     {
@@ -177,16 +253,33 @@ sealed class WindowPrefs
 
 sealed class SetupDialog : Form
 {
+    // The six supported (agent, runtime) combinations. Single dropdown — no
+    // fiddling with two ComboBoxes for what is conceptually one choice.
+    internal static readonly (string Label, string Agent, string Runtime)[] Options =
+    {
+        ("Claude  (WSL)",      "claude",  "wsl"),
+        ("Claude  (Windows)",  "claude",  "windows"),
+        ("Copilot (WSL)",      "copilot", "wsl"),
+        ("Copilot (Windows)",  "copilot", "windows"),
+        ("Codex   (WSL)",      "codex",   "wsl"),
+        ("Codex   (Windows)",  "codex",   "windows"),
+    };
+
     private readonly TextBox _dirBox;
     private readonly CheckBox _claudeCb;
     private readonly CheckBox _skipSetupCb;
+    private readonly ComboBox _modeCb;
+
     public string ChosenDir => _dirBox.Text.Trim();
     public bool OpenClaude => _claudeCb.Checked;
     public bool SkipSetup => _skipSetupCb.Checked;
+    public string Agent   => Options[Math.Max(0, _modeCb.SelectedIndex)].Agent;
+    public string Runtime => Options[Math.Max(0, _modeCb.SelectedIndex)].Runtime;
 
-    public SetupDialog(string defaultDir, bool claudeDefault = true, bool skipSetupDefault = false)
+    public SetupDialog(string defaultDir, bool claudeDefault = true, bool skipSetupDefault = false,
+                       string agentDefault = "claude", string runtimeDefault = "wsl")
     {
-        Text = "Lumina"; Size = new Size(500, 180);
+        Text = "Lumina"; Size = new Size(500, 240);
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         Font = new Font("Segoe UI", 9.5f);
@@ -198,13 +291,27 @@ sealed class SetupDialog : Form
             using var dlg = new FolderBrowserDialog { SelectedPath = _dirBox.Text };
             if (dlg.ShowDialog(this) == DialogResult.OK) _dirBox.Text = dlg.SelectedPath;
         };
-        _claudeCb = new CheckBox { Text = "Embed Claude Code CLI on left", Location = new Point(12, 54), Checked = claudeDefault, AutoSize = true };
-        _skipSetupCb = new CheckBox { Text = "Don't ask me again (skip this dialog next time)", Location = new Point(12, 82), Checked = skipSetupDefault, AutoSize = true };
 
-        var ok = new Button { Text = "Start", Location = new Point(304, 108), Width = 70, Height = 28, DialogResult = DialogResult.OK };
-        var cancel = new Button { Text = "Cancel", Location = new Point(382, 108), Width = 70, Height = 28, DialogResult = DialogResult.Cancel };
+        var modeLbl = new Label { Text = "Agent + Runtime:", Location = new Point(12, 56), AutoSize = true };
+        _modeCb = new ComboBox
+        {
+            Location = new Point(124, 52), Width = 280,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = new Font("Cascadia Mono, Consolas, monospace", 9.5f),
+        };
+        foreach (var opt in Options) _modeCb.Items.Add(opt.Label);
+        var defaultIdx = Array.FindIndex(Options, o =>
+            o.Agent.Equals(agentDefault, StringComparison.OrdinalIgnoreCase) &&
+            o.Runtime.Equals(runtimeDefault, StringComparison.OrdinalIgnoreCase));
+        _modeCb.SelectedIndex = defaultIdx >= 0 ? defaultIdx : 0;
+
+        _claudeCb = new CheckBox { Text = "Embed terminal on the left", Location = new Point(12, 90), Checked = claudeDefault, AutoSize = true };
+        _skipSetupCb = new CheckBox { Text = "Don't ask me again (skip this dialog next time)", Location = new Point(12, 118), Checked = skipSetupDefault, AutoSize = true };
+
+        var ok = new Button { Text = "Start", Location = new Point(304, 152), Width = 70, Height = 28, DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "Cancel", Location = new Point(382, 152), Width = 70, Height = 28, DialogResult = DialogResult.Cancel };
         AcceptButton = ok; CancelButton = cancel;
-        Controls.AddRange(new Control[] { _dirBox, browse, _claudeCb, _skipSetupCb, ok, cancel });
+        Controls.AddRange(new Control[] { _dirBox, browse, modeLbl, _modeCb, _claudeCb, _skipSetupCb, ok, cancel });
     }
 }
 
@@ -215,9 +322,16 @@ sealed class SplitWindow : Form
     private readonly Label _rightStatus;
     private readonly string _winDir;
     private readonly bool _openClaude;
+    private readonly string _runtime;
     private readonly WindowPrefs _prefs;
     private SplitContainer? _split;
     private const string BUDDY_URL = "http://localhost:3000";
+
+    // Append ?agent=<chosen> so the web app can show the right agent in the
+    // settings panel and demo panel before any hook event has fired. Without
+    // this, the panel would keep showing whatever agent was used last (sticky
+    // localStorage) until the user actually invokes a tool.
+    private string BuddyUrlForAgent => $"{BUDDY_URL}/?agent={Uri.EscapeDataString(_prefs.Agent)}";
 
     // Full VS Code terminal stack: xterm.js + fit + search + weblinks + unicode11
     // Protocol mirrors VS Code's terminalInstance.ts: raw strings for data/input,
@@ -340,7 +454,7 @@ sealed class SplitWindow : Form
 
     public SplitWindow(string winDir, bool openClaude, WindowPrefs prefs)
     {
-        _winDir = winDir; _openClaude = openClaude; _prefs = prefs;
+        _winDir = winDir; _openClaude = openClaude; _prefs = prefs; _runtime = prefs.Runtime;
         Text = "✦ Lumina";
 
         // Restore previous window state
@@ -490,8 +604,8 @@ sealed class SplitWindow : Form
         var token = await GetTerminalToken();
         if (string.IsNullOrEmpty(token))
         {
-            _leftWv.CoreWebView2.NavigateToString(
-                "<html><body style='background:#0d0d0d;color:#b55;display:flex;align-items:center;justify-content:center;height:100vh;font:14px Segoe UI'>terminal token unavailable</body></html>");
+            var diag = await ReadTerminalDiagnosticAsync();
+            _leftWv.CoreWebView2.NavigateToString(BuildTerminalErrorHtml(diag));
             return;
         }
 
@@ -499,32 +613,135 @@ sealed class SplitWindow : Form
         _leftWv.CoreWebView2.NavigateToString(html);
     }
 
-    // Read terminal auth token from WSL cache file populated by start-terminal.sh
-    private static async Task<string> GetTerminalToken()
+    // Read terminal auth token. WSL runtime → ~/.cache/lumina/terminal.token via wsl.exe;
+    // Windows runtime → %LOCALAPPDATA%\Lumina\terminal.token directly.
+    private async Task<string> GetTerminalToken()
     {
         for (int i = 0; i < 20; i++)
         {
             try
             {
-                var psi = new ProcessStartInfo("wsl.exe", "-- bash -c \"cat ${XDG_CACHE_HOME:-$HOME/.cache}/lumina/terminal.token 2>/dev/null || true\"")
-                {
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using var p = Process.Start(psi);
-                if (p != null)
-                {
-                    var token = (await p.StandardOutput.ReadToEndAsync()).Trim();
-                    await p.WaitForExitAsync();
-                    if (System.Text.RegularExpressions.Regex.IsMatch(token, "^[0-9a-f]{32}$"))
-                        return token;
-                }
+                string token = _runtime.Equals("windows", StringComparison.OrdinalIgnoreCase)
+                    ? ReadWindowsCacheFile("terminal.token")
+                    : await ReadWslCacheFile("terminal.token");
+                if (System.Text.RegularExpressions.Regex.IsMatch(token, "^[0-9a-f]{32}$"))
+                    return token;
             }
             catch { }
             await Task.Delay(200);
         }
         return "";
+    }
+
+    // start-terminal.{sh,ps1} writes a diagnostic code (DEPS_MISSING / PTY_ABI_MISMATCH /
+    // PTY_LOAD_FAIL / SERVER_NOT_STARTED / AGENT_MISSING:<name>) when a pre-install check
+    // fails. Empty string means file absent or read failed.
+    private async Task<string> ReadTerminalDiagnosticAsync()
+    {
+        try
+        {
+            return _runtime.Equals("windows", StringComparison.OrdinalIgnoreCase)
+                ? ReadWindowsCacheFile("terminal.error")
+                : (await ReadWslCacheFile("terminal.error"));
+        }
+        catch { return ""; }
+    }
+
+    private static async Task<string> ReadWslCacheFile(string name)
+    {
+        var psi = new ProcessStartInfo("wsl.exe",
+            $"-- bash -c \"cat ${{XDG_CACHE_HOME:-$HOME/.cache}}/lumina/{name} 2>/dev/null || true\"")
+        {
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = Process.Start(psi);
+        if (p == null) return "";
+        var s = (await p.StandardOutput.ReadToEndAsync()).Trim();
+        await p.WaitForExitAsync();
+        return s;
+    }
+
+    private static string ReadWindowsCacheFile(string name)
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Lumina");
+        var path = Path.Combine(dir, name);
+        if (!File.Exists(path)) return "";
+        try { return File.ReadAllText(path).Trim(); }
+        catch { return ""; }
+    }
+
+    private static string BuildTerminalErrorHtml(string diagCode)
+    {
+        // AGENT_MISSING:<name> — extract the agent and synthesize an install hint.
+        if (diagCode.StartsWith("AGENT_MISSING:"))
+        {
+            var agent = diagCode.Substring("AGENT_MISSING:".Length).Trim();
+            var (atitle, adetail, afix) = agent switch
+            {
+                "claude" => (
+                    "claude not found on PATH",
+                    "The Claude Code CLI isn't installed in this runtime.",
+                    "curl -fsSL claude.ai/install.sh | bash   # or: npm install -g @anthropic-ai/claude-code"),
+                "copilot" => (
+                    "copilot not found on PATH",
+                    "The GitHub Copilot CLI isn't installed in this runtime.",
+                    "npm install -g @github/copilot"),
+                "codex" => (
+                    "codex not found on PATH",
+                    "The OpenAI Codex CLI isn't installed in this runtime.",
+                    "npm install -g @openai/codex   # or build from github.com/openai/codex"),
+                _ => (
+                    $"Agent '{agent}' not found",
+                    "The selected agent binary isn't installed in this runtime.",
+                    $"Install '{agent}' or pick a different agent in the setup dialog (--setup)")
+            };
+            var t1 = System.Net.WebUtility.HtmlEncode(atitle);
+            var d1 = System.Net.WebUtility.HtmlEncode(adetail);
+            var f1 = System.Net.WebUtility.HtmlEncode(afix);
+            return "<html><body style='background:#0d0d0d;color:#ddd;font:14px Segoe UI;padding:24px;line-height:1.5'>" +
+                   $"<h2 style='color:#b55;margin:0 0 8px'>{t1}</h2>" +
+                   $"<p style='color:#888;margin:0 0 16px'>{d1}</p>" +
+                   "<p style='color:#888;margin:0 0 6px'>Install the CLI, then close and reopen Lumina:</p>" +
+                   $"<pre style='background:#000;color:#ffe;padding:12px;border-radius:4px;margin:0'>{f1}</pre>" +
+                   "</body></html>";
+        }
+
+        var (title, detail, fix) = diagCode switch
+        {
+            "DEPS_MISSING" => (
+                "Terminal dependencies not installed",
+                "First-run setup hasn't been completed for the terminal server.",
+                "cd src/terminal && npm install"),
+            "PTY_ABI_MISMATCH" => (
+                "node-pty built against a different Node version",
+                "The shipped native binary doesn't match the Node currently in PATH (libnode.so version differs).",
+                "cd src/terminal && npm rebuild node-pty"),
+            "PTY_LOAD_FAIL" => (
+                "node-pty native binary failed to load",
+                "The native module for the current platform couldn't be loaded. Check /tmp/lumina-terminal.log for details.",
+                "cd src/terminal && npm rebuild node-pty"),
+            "SERVER_NOT_STARTED" => (
+                "Terminal server failed to start",
+                "Pre-install checks passed but the server didn't bind :3031. Check /tmp/lumina-terminal.log for details.",
+                "tail -n 50 /tmp/lumina-terminal.log"),
+            _ => (
+                "Terminal token unavailable",
+                "The terminal server may not have been started yet.",
+                "bash scripts/start-terminal.sh \"$(pwd)\"")
+        };
+        var t = System.Net.WebUtility.HtmlEncode(title);
+        var d = System.Net.WebUtility.HtmlEncode(detail);
+        var f = System.Net.WebUtility.HtmlEncode(fix);
+        return "<html><body style='background:#0d0d0d;color:#ddd;font:14px Segoe UI;padding:24px;line-height:1.5'>" +
+               $"<h2 style='color:#b55;margin:0 0 8px'>{t}</h2>" +
+               $"<p style='color:#888;margin:0 0 16px'>{d}</p>" +
+               "<p style='color:#888;margin:0 0 6px'>Run this in a WSL terminal, then close and reopen Lumina:</p>" +
+               $"<pre style='background:#000;color:#ffe;padding:12px;border-radius:4px;margin:0'>{f}</pre>" +
+               "</body></html>";
     }
 
     private async Task WaitAndNavigateBuddy()
@@ -544,7 +761,7 @@ sealed class SplitWindow : Form
     private void NavigateBuddy()
     {
         if (InvokeRequired) { Invoke(NavigateBuddy); return; }
-        _rightWv.CoreWebView2.Navigate(BUDDY_URL);
+        _rightWv.CoreWebView2.Navigate(BuddyUrlForAgent);
         _rightWv.NavigationCompleted += (_, _) =>
         {
             _rightStatus.Visible = false;

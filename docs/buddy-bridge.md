@@ -1,36 +1,66 @@
-# Buddy Bridge — Claude Code → ChatVRM events
+# Buddy Bridge — Coding-AI → ChatVRM events
 
-Pipeline:
+Pipeline (works for **claude**, **copilot**, and **codex** — bridge is agent-agnostic):
 
 ```
-Claude Code  →  hook script  →  POST /event  →  buddy-bridge (SSE)  →  ChatVRM client  →  VRM emote
-   (CLI)       (buddy-hook.sh)   (HTTP)        (scripts/buddy-bridge.mjs)   (buddyEvents.ts)
+Coding AI CLI  →  hook script        →  POST /event  →  buddy-bridge (SSE)         →  ChatVRM client            →  VRM emote
+                  (buddy-hook.sh /                       (scripts/buddy-bridge.mjs)    (buddyEvents.ts: per-agent
+                   buddy-hook.ps1)                                                      tool-name normalization)
 ```
 
 ## Components
 
 | Layer | File | Role |
 |-------|------|------|
-| Hook config | `~/.claude/settings.json` (global) | Absolute-path hooks fire for **all** Claude Code sessions on this machine. |
-| Hook adapter | `scripts/buddy-hook.sh` | Reads hook JSON from stdin, POSTs compact JSON envelope to bridge. **Must always exit 0.** |
-| Bridge | `scripts/buddy-bridge.mjs` | Standalone Node service on `127.0.0.1:3030`. POST broadcasts to SSE. Zero deps. |
-| Client | `src/web/src/features/buddyEvents/buddyEvents.ts` | EventSource on `/events`; REACTIONS/GIT_REACTIONS/LANGUAGE_REACTIONS/TOOL_RESULT_REACTIONS all locale-aware. |
+| Hook config (Claude) | `~/.claude/settings.json` | Hooks fire for all Claude Code sessions on this machine. |
+| Hook config (Codex) | `~/.codex/hooks.json` (+ `[features] codex_hooks=true` in `~/.codex/config.toml`) | Same lifecycle minus `SessionEnd`/`Notification`. |
+| Hook config (Copilot) | `<project>/.github/hooks/lumina.json` | Project-local; the file embeds both `bash` and `powershell` commands so the same config works on either runtime. |
+| Hook installer | `scripts/install-hooks.{sh,ps1}` | Idempotent — auto-merged on launcher start. Detects which CLIs are on PATH and installs only those. |
+| Hook adapter (WSL) | `scripts/buddy-hook.sh` | Reads hook JSON from stdin, POSTs normalized envelope to bridge. **Must always exit 0.** Takes `<event-type> <agent>` args; the agent arg picks the right per-agent stdin shape. |
+| Hook adapter (Win) | `scripts/buddy-hook.ps1` | PowerShell sibling, same contract + envelope shape. |
+| Bridge | `scripts/buddy-bridge.mjs` | Standalone Node service on `127.0.0.1:3030`. POST broadcasts to SSE. Zero deps. Agent-agnostic dumb relay. |
+| Client | `src/web/src/features/buddyEvents/buddyEvents.ts` | EventSource on `/events`; per-agent tool-name normalization (`TOOL_NORMALIZE`); REACTIONS/GIT_REACTIONS/LANGUAGE_REACTIONS/TOOL_RESULT_REACTIONS all locale-aware. |
 | Mount | `src/web/src/pages/index.tsx` | `useEffect` calls `connectBuddyEvents(viewer, { onMessage, onStatusUpdate, onAfterApply })` once viewer is ready. |
 | Status poller | `scripts/status-bridge.sh` | Reads ccusage statusline every 5s; posts `StatusUpdate` event with [Task]/[Scope]/[TODO]. |
 
+### Per-agent differences absorbed in the hook adapter
+
+| | Claude | Codex | Copilot |
+|---|---|---|---|
+| stdin tool field | `tool_name` | `tool_name` | `toolName` |
+| stdin args field | `tool_input` (object) | `tool_input` (object) | `toolArgs` (JSON-encoded **string**) |
+| stdin session field | `session_id` | `session_id` | (none — emitted as `null`) |
+| Lifecycle events fired | 7 (full) | 6 (no `SessionEnd`) | 6 (no `Stop`) |
+| Tool name examples | `Bash`, `Edit`, `Write` | `Bash`, `apply_patch` (→ `Edit`) | `bash` (→ `Bash`), `shell` (→ `Bash`) |
+
+**Per-agent → canonical event remap** (done at install-hooks time so the bridge & `REACTIONS` see one taxonomy):
+
+| Agent raw event | Canonical event the bridge sees | Why |
+|---|---|---|
+| Codex `PermissionRequest` | `Notification` | Codex's analog to Claude's permission prompt — same ⚠️ angry emote |
+| Copilot `errorOccurred` | `Notification` | Closest Copilot event to Claude's notification flow |
+| Copilot `userPromptSubmitted` | `UserPromptSubmit` | Lowercase → PascalCase naming alignment |
+| Copilot `sessionStart` / `sessionEnd` / `preToolUse` / `postToolUse` | PascalCase equivalents | Same |
+
+**Agent-level limitations (cannot be fixed in Lumina)**:
+- **Codex never fires `SessionEnd`** — the goodbye line `🌙 See you next time~` will be silent on Codex sessions. (Codex CLI doesn't expose this lifecycle event.)
+- **Copilot never fires `Stop`** — the per-turn `🎉 Done.` line will be silent on Copilot sessions. (Copilot CLI doesn't expose a turn-finished event.)
+
+The hook adapter normalizes the stdin shape and the tool name; `buddyEvents.ts` further normalizes Copilot's `toolArgs` JSON-string into Claude's `tool_input` object so language/git/result detection works uniformly across all three agents. End result: the bridge sees a consistent envelope (`{type, tool, session, agent, context}`), the SSE consumer applies the same reactions regardless of source.
+
 ## Event taxonomy
 
-All events POSTed to the bridge carry: `{ type, ts, tool?, session?, context }`.
+All events POSTed to the bridge carry: `{ type, ts, tool?, session?, agent?, context }`. The `agent` field (`claude` | `copilot` | `codex`) lets the SSE consumer pick the right tool-normalization map and welcome line; defaults to `claude` for backward compatibility with old hook payloads.
 
 | `type` | When fired | Default emote | Default overlay (EN) |
 |--------|-----------|---------------|-----------------|
-| `SessionStart` | Claude Code starts/resumes a session | `relaxed` | "👋 Claude is here." |
-| `SessionEnd` | Session ends | `neutral` | "🌙 See you next time~" |
+| `SessionStart` | A coding-AI session starts/resumes | `relaxed` | "👋 Claude/Copilot/Codex is here." (per agent) |
+| `SessionEnd` | Session ends (Claude / Copilot only) | `neutral` | "🌙 See you next time~" |
 | `UserPromptSubmit` | You submit a prompt | `neutral` | (silent — slash commands route to cinematic effects) |
-| `PreToolUse` | Claude is about to run Bash/Edit/Write/NotebookEdit | `neutral` | "⚙️ Running command…" / "✏️ Editing code…" |
+| `PreToolUse` | About to run a tool (Bash/Edit/Write/NotebookEdit, after normalization) | `neutral` | "⚙️ Running command…" / "✏️ Editing code…" |
 | `PostToolUse` | Tool returned (Bash/Edit/Write/Read) | `happy` | "✅ Command done." / "✅ Edit complete." |
-| `Notification` | Permission prompt or other Claude notification | `angry` | "⚠️ Your reply needed!" |
-| `Stop` | Claude finished a turn | `relaxed` | "🎉 Done." |
+| `Notification` | Permission prompt or `errorOccurred` (Copilot) | `angry` | "⚠️ Your reply needed!" |
+| `Stop` | Agent finished a turn (Claude / Codex only) | `relaxed` | "🎉 Done." |
 | `StatusUpdate` | ccusage status-bridge.sh polls every 5s | — | shown in StatusPanel; logged to Buddy Log |
 
 All reaction strings are **locale-aware** — `L(zh, en, ja)` is called at event time, not at startup. Switch language in Settings → all future reactions use the new locale immediately.
@@ -76,11 +106,16 @@ node scripts/buddy-bridge.mjs &
 # 2. In another terminal, subscribe
 curl -sN http://127.0.0.1:3030/events
 
-# 3. From a third terminal, fire a test event the way Claude would
-echo '{"tool_name":"Edit","session_id":"test"}' | scripts/buddy-hook.sh PostToolUse
+# 3. From a third terminal, fire a test event for each agent
+echo '{"tool_name":"Edit","session_id":"test"}'                  | scripts/buddy-hook.sh PostToolUse claude
+echo '{"toolName":"bash","toolArgs":"{\"command\":\"ls\"}"}'    | scripts/buddy-hook.sh PreToolUse  copilot
+echo '{"tool_name":"apply_patch","session_id":"x"}'              | scripts/buddy-hook.sh PostToolUse codex
 
-# Subscriber should print:
-# data: {"ts":..., "type":"PostToolUse", "tool":"Edit", "session":"test", "context":{...}}
+# Subscriber should print three envelopes; each carries an "agent" field so the
+# client can tell them apart:
+#   data: {"ts":..., "type":"PostToolUse", "tool":"Edit",        "session":"test", "agent":"claude",  "context":{...}}
+#   data: {"ts":..., "type":"PreToolUse",  "tool":"bash",        "session":null,   "agent":"copilot", "context":{...}}
+#   data: {"ts":..., "type":"PostToolUse", "tool":"apply_patch", "session":"x",    "agent":"codex",   "context":{...}}
 ```
 
 If the subscriber gets the event but the VRM doesn't react, open the browser console — `buddyEvents.ts` logs `[buddy] connected to ...` on success and `[buddy] playEmotion failed` if the model isn't loaded yet.

@@ -54,8 +54,14 @@ run_section() {
 
 run_section bridge    "bash '$TESTS_DIR/bridge.test.sh'"
 run_section hook      "bash '$TESTS_DIR/hook.test.sh'"
+run_section multihook "bash '$TESTS_DIR/multi-agent-hook.test.sh'"
+run_section install   "bash '$TESTS_DIR/install-hooks.test.sh'"
 run_section scripts   "bash '$TESTS_DIR/scripts.test.sh'"
 run_section detection "node --test '$TESTS_DIR/detection.test.mjs'"
+run_section normalize "node --test '$TESTS_DIR/multi-agent-normalize.test.mjs'"
+run_section settings  "node --test '$TESTS_DIR/lumina-settings.test.mjs'"
+run_section apicfg    "node --test '$TESTS_DIR/api-hooks-config.test.mjs'"
+run_section agents    "node --test '$TESTS_DIR/agent-tracking.test.mjs'"
 run_section state     "node --test '$TESTS_DIR/state.test.mjs'"
 run_section web       "bash '$TESTS_DIR/web.test.sh'"
 

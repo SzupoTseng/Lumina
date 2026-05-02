@@ -2,8 +2,9 @@
 // Left-side collapsible panel; categorised rows with Send buttons.
 // Add a new demo item by appending to any DEMOS array below.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useT, useLocale, getLocale } from "@/features/i18n/i18n";
+import { agentDisplayName, type AgentId } from "@/features/agents/agents";
 
 type EmotionPreset = "neutral" | "happy" | "angry" | "sad" | "relaxed";
 type EffectKind    = "energy_gather" | "triumph" | "flash" | "crisis";
@@ -72,22 +73,49 @@ const RESULT_DEMOS: DemoItem[] = [
   { label:"🧹 Lint Clean", bubble:"🧹 整潔。",                             bubble_en:"🧹 Clean.",                                    bubble_ja:"🧹 きれい。",                   emotion:"relaxed", effect:"flash",   duration:1200 },
 ];
 
-const SESSION_DEMOS: DemoItem[] = [
-  { label:"👋 SessionStart", bubble:"👋 Claude 來上班了。", bubble_en:"👋 Claude is here.",      bubble_ja:"👋 クロードが来た。",  emotion:"relaxed", effect:"flash",   duration:1200 },
-  { label:"🎉 Stop",         bubble:"🎉 好了。",             bubble_en:"🎉 Done.",                bubble_ja:"🎉 完了。",            emotion:"relaxed", effect:"triumph", duration:2500 },
-  { label:"⚠️ Notification", bubble:"⚠️ 需要你回覆一下！",  bubble_en:"⚠️ Your reply needed!",  bubble_ja:"⚠️ 返信が必要です！", emotion:"angry",   effect:"crisis",  duration:2500 },
-  { label:"🌙 SessionEnd",   bubble:"🌙 下次見～",           bubble_en:"🌙 See you next time~",   bubble_ja:"🌙 またね～",          emotion:"neutral", effect:"flash",   duration:1000 },
-];
+// SESSION_DEMOS is built per agent because lifecycle coverage differs:
+//   claude  — fires SessionStart, Stop, Notification, SessionEnd (all 4)
+//   codex   — no SessionEnd (Codex CLI doesn't expose that event)
+//   copilot — no Stop      (Copilot CLI doesn't expose a turn-finished event)
+// PermissionRequest (codex) and errorOccurred (copilot) both map to canonical
+// Notification, so the Notification demo fires the same UI on all 3 agents.
+// Agent name comes from agentDisplayName(); only the greeting per-locale
+// lives here (translation responsibility, not a brand-name table).
+const SESSION_GREETING: Record<AgentId, { zh: string; en: string; ja: string }> = {
+  claude:  { zh: "👋 Claude 來上班了。",  en: "👋 Claude is here.",  ja: "👋 クロードが来た。" },
+  copilot: { zh: "👋 Copilot 來上班了。", en: "👋 Copilot is here.", ja: "👋 Copilotが来た。" },
+  codex:   { zh: "👋 Codex 來上班了。",   en: "👋 Codex is here.",   ja: "👋 Codexが来た。" },
+};
 
-// Category keys map to i18n — titles resolved at render time
-const CATEGORY_KEYS = [
-  { key: "demo.cat.slash"   as const, items: SLASH_DEMOS   },
-  { key: "demo.cat.emotion" as const, items: EMOTION_DEMOS },
-  { key: "demo.cat.git"     as const, items: GIT_DEMOS     },
-  { key: "demo.cat.lang"    as const, items: LANG_DEMOS    },
-  { key: "demo.cat.result"  as const, items: RESULT_DEMOS  },
-  { key: "demo.cat.session" as const, items: SESSION_DEMOS },
-];
+function sessionDemosFor(agent: AgentId): DemoItem[] {
+  const g = SESSION_GREETING[agent];
+  const items: DemoItem[] = [
+    { label:"👋 SessionStart", bubble:g.zh, bubble_en:g.en, bubble_ja:g.ja, emotion:"relaxed", effect:"flash", duration:1200 },
+    { label:"⚠️ Notification", bubble:"⚠️ 需要你回覆一下！", bubble_en:"⚠️ Your reply needed!", bubble_ja:"⚠️ 返信が必要です！", emotion:"angry", effect:"crisis", duration:2500 },
+  ];
+  // Stop: not fired by Copilot
+  if (agent !== "copilot") {
+    items.push({ label:"🎉 Stop", bubble:"🎉 好了。", bubble_en:"🎉 Done.", bubble_ja:"🎉 完了。", emotion:"relaxed", effect:"triumph", duration:2500 });
+  }
+  // SessionEnd: not fired by Codex
+  if (agent !== "codex") {
+    items.push({ label:"🌙 SessionEnd", bubble:"🌙 下次見～", bubble_en:"🌙 See you next time~", bubble_ja:"🌙 またね～", emotion:"neutral", effect:"flash", duration:1000 });
+  }
+  return items;
+}
+
+// Category keys map to i18n — titles resolved at render time. Session items
+// are built dynamically per agent (see sessionDemosFor).
+function categoriesFor(agent: AgentId) {
+  return [
+    { key: "demo.cat.slash"   as const, items: SLASH_DEMOS               },
+    { key: "demo.cat.emotion" as const, items: EMOTION_DEMOS             },
+    { key: "demo.cat.git"     as const, items: GIT_DEMOS                 },
+    { key: "demo.cat.lang"    as const, items: LANG_DEMOS                },
+    { key: "demo.cat.result"  as const, items: RESULT_DEMOS              },
+    { key: "demo.cat.session" as const, items: sessionDemosFor(agent)    },
+  ];
+}
 
 // ── component ─────────────────────────────────────────────────────────────────
 
@@ -95,6 +123,10 @@ interface Props {
   onMessage: (line: string) => void;
   onEmotion: (e: EmotionPreset) => void;
   onEffect:  (kind: EffectKind, msg: string, durationMs: number) => void;
+  // Optional. When provided, the panel adapts to that agent (filters
+  // session-lifecycle items the agent doesn't fire, and uses the right
+  // welcome line). Defaults to "claude" for back-compat.
+  agent?:    AgentId;
 }
 
 const OPEN_KEY = "lumina.demoPanel.open";
@@ -102,11 +134,15 @@ const OPEN_KEY = "lumina.demoPanel.open";
 const PANEL_STYLE = { backgroundColor: "#514062", borderColor: "#856292" } as const;
 const BTN_STYLE   = { backgroundColor: "#514062", borderColor: "#856292" } as const;
 
-export function DemoPanel({ onMessage, onEmotion, onEffect }: Props) {
+export function DemoPanel({ onMessage, onEmotion, onEffect, agent = "claude" }: Props) {
   const t = useT();
   const [locale] = useLocale();
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
+  // Stable reference between renders unless the agent actually changes —
+  // prevents re-allocating the 6-category array on every locale/state tick
+  // and lets any future child memo work.
+  const categories = useMemo(() => categoriesFor(agent), [agent]);
 
   useEffect(() => {
     setOpen(localStorage.getItem(OPEN_KEY) === "1");
@@ -142,6 +178,9 @@ export function DemoPanel({ onMessage, onEmotion, onEffect }: Props) {
         className="self-start px-3 py-1.5 rounded-xl border-2 text-white text-[11px] font-bold shadow-2xl whitespace-nowrap"
       >
         {open ? "▾" : "▸"} {t("demo.title")}
+        <span className="ml-1.5 text-[9px] font-normal text-white/60">
+          · {agentDisplayName(agent)}
+        </span>
       </button>
 
       {/* Panel */}
@@ -150,7 +189,7 @@ export function DemoPanel({ onMessage, onEmotion, onEffect }: Props) {
           style={PANEL_STYLE}
           className="w-[220px] max-h-[75vh] overflow-y-auto rounded-xl border-2 shadow-2xl text-white"
         >
-          {CATEGORY_KEYS.map((cat) => (
+          {categories.map((cat) => (
             <div key={cat.key}>
               <div className="px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-widest text-white/50 font-bold">
                 {t(cat.key)}

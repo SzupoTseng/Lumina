@@ -33,7 +33,20 @@ case "$LUMINA_ROOT" in
       --exclude='.next' \
       --exclude='.git' \
       --exclude='reasoninghist' \
+      --exclude='src/web/public' \
       "$LUMINA_ROOT/" "$RUNTIME/"
+
+    # Live-link public/ to source so newly added .vrm / personalities/*.json
+    # appear in /api/models and /api/personalities without re-running rsync.
+    # Next dev serves public/ on-demand from disk, so the symlink is read on
+    # every request. The 9p watchpack bug only affects the project root's
+    # parent, so a symlink inside src/web/ is safe.
+    SOURCE_PUBLIC="$LUMINA_ROOT/src/web/public"
+    RUNTIME_PUBLIC="$WEB_DIR/public"
+    if [ ! -L "$RUNTIME_PUBLIC" ] || [ "$(readlink "$RUNTIME_PUBLIC")" != "$SOURCE_PUBLIC" ]; then
+      rm -rf "$RUNTIME_PUBLIC"
+      ln -s "$SOURCE_PUBLIC" "$RUNTIME_PUBLIC"
+    fi
 
     if [ ! -d "$WEB_DIR/node_modules" ]; then
       echo "[start-dev] running npm install in $WEB_DIR"

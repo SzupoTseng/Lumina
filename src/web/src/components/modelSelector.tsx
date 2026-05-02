@@ -10,7 +10,7 @@
 // Drag-and-drop onto the canvas remains the per-session fast path; this
 // component is for persisted selection across reloads.
 
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { buildUrl } from "@/utils/buildUrl";
 import { SELECTED_MODEL_STORAGE_KEY } from "@/features/constants/vrmConstants";
@@ -49,6 +49,19 @@ export function ModelSelector() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Re-scan public/ each time the dropdown is opened so newly dropped-in
+  // .vrm files appear without a page reload. Cheap fs.readdirSync on the
+  // server; preserves selection.
+  const refresh = useCallback(async () => {
+    try {
+      const r = await fetch(buildUrl("/api/models"));
+      if (!r.ok) return;
+      const data = (await r.json()) as { models?: ModelEntry[] };
+      const list = Array.isArray(data.models) ? data.models : [];
+      setModels(list);
+    } catch {}
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -90,6 +103,8 @@ export function ModelSelector() {
         id="lumina-model-selector"
         value={selected}
         onChange={handleChange}
+        onMouseDown={refresh}
+        onFocus={refresh}
         aria-label="Select VRM model"
         className="bg-primary text-white px-3 py-2 rounded-md border border-primary-hover text-sm cursor-pointer hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary"
       >

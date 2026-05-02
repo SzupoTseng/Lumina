@@ -1,8 +1,11 @@
 // StatusBar — Web (:3000) + Bridge (:3030) status dots at top-centre.
 // Polls every 5s. Click a down service to confirm restart via API.
+// Bridge stays down ≥ 3 min → confirm() reminder, repeats every 3 min.
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useT } from "@/features/i18n/i18n";
+
+const REMINDER_INTERVAL_MS = 3 * 60 * 1000;
 
 type Status = "up" | "down" | "checking";
 
@@ -38,8 +41,11 @@ export function StatusBar() {
   const [web,    setWeb]    = useState<Status>("checking");
   const [bridge, setBridge] = useState<Status>("checking");
 
-  const restartBridge = useCallback(async () => {
-    if (!confirm(t("ui.bridge.restart.confirm"))) return;
+  const downSinceRef = useRef<number | null>(null);
+  const lastReminderRef = useRef<number | null>(null);
+  const reminderActiveRef = useRef(false);
+
+  const doRestart = useCallback(async () => {
     try {
       await fetch("/api/restart-bridge", { method: "POST" });
       await new Promise(r => setTimeout(r, 3000));
@@ -48,20 +54,47 @@ export function StatusBar() {
     }
   }, [t]);
 
+  const restartBridge = useCallback(async () => {
+    if (!confirm(t("ui.bridge.restart.confirm"))) return;
+    await doRestart();
+  }, [t, doRestart]);
+
   const check = useCallback(async () => {
     setWeb("up"); // page is loaded → web is up
 
+    let isUp = false;
     try {
       const r = await fetch("http://127.0.0.1:3030/health", {
         cache: "no-store",
         signal: AbortSignal.timeout(2000),
       });
       const j = await r.json();
-      setBridge(j.ok === true ? "up" : "down");
+      isUp = j.ok === true;
     } catch {
-      setBridge("down");
+      isUp = false;
     }
-  }, []);
+    setBridge(isUp ? "up" : "down");
+
+    const now = Date.now();
+    if (isUp) {
+      downSinceRef.current = null;
+      lastReminderRef.current = null;
+      return;
+    }
+    if (downSinceRef.current === null) downSinceRef.current = now;
+    const downForMs = now - downSinceRef.current;
+    const sinceLast = now - (lastReminderRef.current ?? downSinceRef.current);
+    if (downForMs >= REMINDER_INTERVAL_MS && sinceLast >= REMINDER_INTERVAL_MS) {
+      if (reminderActiveRef.current) return; // don't stack confirms
+      reminderActiveRef.current = true;
+      lastReminderRef.current = now;
+      const minutes = Math.max(1, Math.floor(downForMs / 60000));
+      const msg = `${t("ui.bridge.reminder.prefix")}${minutes}${t("ui.bridge.reminder.suffix")}`;
+      const accepted = confirm(msg);
+      reminderActiveRef.current = false;
+      if (accepted) await doRestart();
+    }
+  }, [t, doRestart]);
 
   useEffect(() => {
     check();
